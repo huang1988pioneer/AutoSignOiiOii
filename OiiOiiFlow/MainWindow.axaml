@@ -56,6 +56,15 @@
               <TextBlock Classes="muted" Text="手動執行每日領取、讀取最新 workflow 結果，並依台北日期統計成功連續天數。" TextWrapping="Wrap" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="10">
+              <TextBlock Classes="muted" Text="瀏覽器" VerticalAlignment="Center" />
+              <ComboBox x:Name="DashboardBrowserComboBox" Width="200" SelectedIndex="0">
+                <ComboBoxItem Tag="chromium" Content="Chromium（預設）" />
+                <ComboBoxItem Tag="firefox" Content="Firefox（備案）" />
+                <ComboBoxItem Tag="edge" Content="Edge（備案）" />
+              </ComboBox>
+              <TextBlock Classes="muted" FontSize="12" Text="Chromium 失敗時可改選 Firefox 或 Edge 備案。" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="10">
               <Button x:Name="TriggerClaimButton" Classes="primary" Click="TriggerClaimButton_OnClick">手動觸發每日領取</Button>
               <Button x:Name="RefreshDashboardButton" Click="RefreshDashboardButton_OnClick">更新執行結果</Button>
             </StackPanel>
@@ -133,6 +142,15 @@
             <StackPanel Grid.Column="1" Spacing="11">
               <TextBlock Text="執行登入流程" FontWeight="SemiBold" FontSize="16" />
               <TextBlock Classes="muted" Text="按下按鈕後會開啟瀏覽器。請自行完成登入，確認已進入 OiiOii 首頁後關閉瀏覽器；不要在這個工具中貼入密碼或驗證碼。" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Classes="muted" Text="瀏覽器" VerticalAlignment="Center" />
+                <ComboBox x:Name="BrowserComboBox" Width="200" SelectedIndex="0">
+                  <ComboBoxItem Tag="chromium" Content="Chromium（預設）" />
+                  <ComboBoxItem Tag="firefox" Content="Firefox（備案）" />
+                  <ComboBoxItem Tag="edge" Content="Edge（備案）" />
+                </ComboBox>
+              </StackPanel>
+              <TextBlock Classes="muted" FontSize="12" Text="Chromium 失敗或被擋時，可改選 Firefox 或 Edge 再建立登入狀態。建議與 GitHub Actions 使用同一瀏覽器。" TextWrapping="Wrap" />
               <Button x:Name="RunFlowButton" Classes="primary" HorizontalAlignment="Left" Click="RunFlowButton_OnClick">開始登入並建立狀態</Button>
             </StackPanel>
           </Grid>

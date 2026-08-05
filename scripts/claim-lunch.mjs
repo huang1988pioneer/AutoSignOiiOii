@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium, firefox } from 'playwright';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +11,9 @@ const STATE_B64 = process.env.OII_STORAGE_STATE_B64;
 const COOKIE_HEADER = process.env.OII_COOKIE;
 const MAX_RETRIES = Number(process.env.OII_MAX_RETRIES) || 3;
 const SCREENSHOT_DIR = process.env.OII_SCREENSHOT_DIR || './screenshots';
+// chromium (default) | firefox | edge (fallbacks).
+// Aliases: chrome → chromium, msedge → edge.
+const BROWSER_NAME = (process.env.OII_BROWSER || 'chromium').toLowerCase().trim();
 
 // Pages that often host daily 盒飯 check-in UI.
 const REWARD_PATHS = [
@@ -38,6 +41,64 @@ function warn(message) {
 
 function log(message) {
   console.log(`[account ${ACCOUNT_NAME}] ${message}`);
+}
+
+/**
+ * Resolve Playwright engine + launch/context options from OII_BROWSER.
+ * Firefox / Edge are user-selectable fallbacks when Chromium is blocked or unstable.
+ * Edge uses Chromium with channel "msedge" (system or Playwright-managed Edge).
+ */
+function resolveBrowserEngine() {
+  if (BROWSER_NAME === 'firefox') {
+    return {
+      name: 'firefox',
+      engine: firefox,
+      launchOptions: {
+        headless: true,
+      },
+      contextOptions: {
+        locale: 'zh-TW',
+        // Use Firefox's own UA; do not spoof Chrome on Gecko.
+      },
+    };
+  }
+
+  if (BROWSER_NAME === 'edge' || BROWSER_NAME === 'msedge') {
+    return {
+      name: 'edge',
+      engine: chromium,
+      launchOptions: {
+        headless: true,
+        channel: 'msedge',
+        args: ['--disable-blink-features=AutomationControlled'],
+      },
+      contextOptions: {
+        locale: 'zh-TW',
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0',
+      },
+    };
+  }
+
+  if (BROWSER_NAME === 'chromium' || BROWSER_NAME === 'chrome') {
+    return {
+      name: 'chromium',
+      engine: chromium,
+      launchOptions: {
+        headless: true,
+        args: ['--disable-blink-features=AutomationControlled'],
+      },
+      contextOptions: {
+        locale: 'zh-TW',
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      },
+    };
+  }
+
+  fail(
+    `Unsupported OII_BROWSER="${BROWSER_NAME}". Use "chromium" (default), "firefox", or "edge".`,
+  );
 }
 
 /**
@@ -233,12 +294,10 @@ async function tryClaimOnPage(page, source) {
   return clickClaimAndConfirm(page, claimButton, source);
 }
 
-async function tryClaimOnce(browser, state) {
+async function tryClaimOnce(browser, state, contextOptions = {}) {
   const context = await browser.newContext({
     ...(state ? { storageState: state.file } : {}),
-    locale: 'zh-TW',
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    ...contextOptions,
   });
   if (COOKIE_HEADER) await context.addCookies(parseCookieHeader(COOKIE_HEADER));
 
@@ -295,16 +354,15 @@ async function main() {
   }
 
   const state = await storageStateFile();
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--disable-blink-features=AutomationControlled'],
-  });
+  const { name: browserName, engine, launchOptions, contextOptions } = resolveBrowserEngine();
+  log(`Using Playwright browser: ${browserName}`);
+  const browser = await engine.launch(launchOptions);
 
   try {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       log(`\n── Attempt ${attempt}/${MAX_RETRIES} ──`);
       try {
-        const ok = await tryClaimOnce(browser, state);
+        const ok = await tryClaimOnce(browser, state, contextOptions);
         if (ok) {
           log('Done.');
           return;
@@ -325,6 +383,9 @@ async function main() {
     fail(
       'No daily 盒飯 claim control was found after all retries. ' +
         'The site UI may have changed; update selectors in scripts/claim-lunch.mjs. ' +
+        (browserName === 'chromium'
+          ? 'If Chromium is blocked, retry with OII_BROWSER=firefox or OII_BROWSER=edge. '
+          : '') +
         'Check screenshots in the workflow artifacts for details.',
     );
   } finally {

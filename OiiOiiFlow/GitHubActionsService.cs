@@ -10,9 +10,14 @@ internal sealed class GitHubActionsService
     private const string Workflow = "claim-oiioii-lunch.yml";
     private static readonly Regex ClaimJobName = new(@"^claim \((?<number>\d+)\) - (?<name>.+)$", RegexOptions.Compiled);
 
-    public async Task TriggerClaimAsync()
+    public async Task TriggerClaimAsync(string browser = "chromium")
     {
-        await RunGhAsync("workflow", "run", Workflow, "--repo", Repository, "--ref", "main");
+        var engine = browser is "firefox" or "edge" or "chromium" ? browser : "chromium";
+        await RunGhAsync(
+            "workflow", "run", Workflow,
+            "--repo", Repository,
+            "--ref", "main",
+            "-f", $"browser={engine}");
     }
 
     public async Task<DashboardSnapshot> GetSnapshotAsync(decimal pointsPerClaim)

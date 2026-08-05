@@ -15,10 +15,12 @@
 
 ### 1. 取得登入狀態
 
-建議使用 Playwright Storage State。登入 OiiOii 後執行：
+建議使用 Playwright Storage State。登入 OiiOii 後執行（預設 Chromium；備案可改 Firefox 或 Edge）：
 
 ```bash
 npx playwright codegen --save-storage=auth.json https://www.oiioii.ai/zh-Hant/
+# 備案 Firefox：npx playwright codegen --browser=firefox --save-storage=auth.json https://www.oiioii.ai/zh-Hant/
+# 備案 Edge：npx playwright codegen --channel=msedge --save-storage=auth.json https://www.oiioii.ai/zh-Hant/
 ```
 
 完成登入後關閉瀏覽器，將 `auth.json` 轉為單行 Base64：
@@ -66,17 +68,23 @@ GitHub Actions 每天會在下列台北時間（UTC+8）各自執行一次：
 
 ## 在本機執行
 
-需求：Node.js 22（CI 使用版本）與可安裝 Chromium 的環境。
+需求：Node.js 22（CI 使用版本）與可安裝 Playwright 瀏覽器的環境。預設使用 **Chromium**；若遇阻擋或失敗，可改用 **Firefox** 或 **Edge** 備案。
 
 ```bash
 npm install
 npx playwright install chromium
+# 備案：npx playwright install firefox
+# 備案：npx playwright install msedge
 
 # 二選一：設定 Cookie 或 Storage State
 export OII_COOKIE='session=...'
 # export OII_STORAGE_STATE_B64='...'
 
 npm run claim
+
+# 改用備案瀏覽器
+# export OII_BROWSER=firefox   # 或 edge
+# npm run claim
 ```
 
 PowerShell：
@@ -84,10 +92,16 @@ PowerShell：
 ```powershell
 npm install
 npx playwright install chromium
+# 備案：npx playwright install firefox
+# 備案：npx playwright install msedge
 $env:OII_COOKIE = 'session=...'
 # 或：$env:OII_STORAGE_STATE_B64 = '...'
 
 npm run claim
+
+# 改用備案瀏覽器
+# $env:OII_BROWSER = 'firefox'   # 或 'edge'
+# npm run claim
 ```
 
 可先檢查腳本語法：
@@ -102,9 +116,23 @@ npm run check
 | --- | --- | --- |
 | `OII_STORAGE_STATE_B64` | 無 | Base64 編碼的 Playwright Storage State JSON |
 | `OII_COOKIE` | 無 | 完整 Cookie Header |
+| `OII_BROWSER` | `chromium` | Playwright 引擎：`chromium`（預設）、`firefox` 或 `edge`（備案；`msedge` 視為 edge） |
 | `OII_ACCOUNT_NAME` | `default` | 用於日誌與截圖檔名的帳號識別 |
 | `OII_MAX_RETRIES` | `3` | 最大嘗試次數 |
 | `OII_SCREENSHOT_DIR` | `./screenshots` | 截圖輸出資料夾 |
+
+### 瀏覽器選擇（Chromium / Firefox / Edge 備案）
+
+| 情境 | 如何選擇 |
+| --- | --- |
+| 本機 `npm run claim` | 環境變數 `OII_BROWSER=chromium`、`firefox` 或 `edge` |
+| GitHub Actions 手動執行 | Run workflow 時選 **browser**（`chromium` / `firefox` / `edge`） |
+| GitHub Actions 排程 | Repository **Variable** `OII_BROWSER`（未設定則用 `chromium`） |
+| 桌面工具建立登入狀態 | 「建立登入狀態」頁的瀏覽器下拉選單 |
+| 桌面工具手動觸發 | 儀表板的瀏覽器下拉選單 |
+
+建議：**建立 Storage State 與實際領取使用同一瀏覽器**（例如皆用 Edge），可減少狀態不相容的機會。  
+Edge 透過 Playwright 的 `channel=msedge` 啟動；本機需已安裝 Microsoft Edge，或先執行 `npx playwright install msedge`。
 
 ## 桌面登入工具（macOS、Linux、Windows）
 
@@ -114,16 +142,17 @@ npm run check
 dotnet run --project OiiOiiFlow/OiiOiiFlow.csproj
 ```
 
-1. 選擇帳號編號，按下建立登入狀態。
-2. 在開啟的瀏覽器完成 OiiOii 登入，然後關閉瀏覽器。
+1. 選擇帳號編號，並選擇瀏覽器（**Chromium 預設**，或 **Firefox / Edge 備案**）。
+2. 按下建立登入狀態，在開啟的瀏覽器完成 OiiOii 登入，然後關閉瀏覽器。
 3. 在工具中讀取並複製 Base64，貼入相同編號的 GitHub Secret。
 
-工具可建立 `01` 至 `33` 編號的登入狀態，但目前 workflow 僅會執行帳號 `1`、`2`、`3`；請使用這三個編號。
+工具可建立 `01` 至 `33` 編號的登入狀態。若 Chromium 無法正常登入，改選 Firefox 或 Edge 後重試；之後手動或排程領取也請使用相同瀏覽器。
 
 ## 疑難排解
 
 - **登入狀態過期**：重新取得 Storage State 或 Cookie，並更新對應的 GitHub Secret。
 - **找不到每日領取按鈕**：到 workflow 的 Artifact 查看截圖；OiiOii 的 UI 若有變更，可能需要調整 `scripts/claim-lunch.mjs` 的選擇器。
+- **Chromium 無法領取或被擋**：改用 Firefox 或 Edge 備案——本機設 `OII_BROWSER=firefox` 或 `edge`、手動 workflow 選對應選項，或設定 Repository Variable `OII_BROWSER`；並以**同一瀏覽器**重新建立 Storage State。
 - **排程沒有準時執行**：GitHub Actions 的排程可能延遲，尤其在整點附近；可先手動執行驗證設定。
 - **需要 OTP、Google 登入或 CAPTCHA**：先在本機正常完成登入，再更新 Storage State／Cookie；此專案不會自動繞過驗證。
 

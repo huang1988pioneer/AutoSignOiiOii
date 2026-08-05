@@ -32,6 +32,32 @@ public partial class MainWindow : Window
     private string SecretName => $"OII_STORAGE_STATE_B64_{AccountNumber}";
     private string? AccountAlias => _accountAliases.GetValueOrDefault(AccountNumber);
 
+    /// <summary>Playwright engine for login codegen: chromium (default), firefox / edge (fallback).</summary>
+    private string LoginBrowser => ReadBrowserSelection(BrowserComboBox);
+
+    /// <summary>Playwright engine when manually triggering GitHub Actions.</summary>
+    private string DashboardBrowser => ReadBrowserSelection(DashboardBrowserComboBox);
+
+    private static string ReadBrowserSelection(ComboBox? comboBox)
+    {
+        if (comboBox?.SelectedItem is ComboBoxItem { Tag: string tag } &&
+            (tag is "chromium" or "firefox" or "edge"))
+            return tag;
+        return "chromium";
+    }
+
+    /// <summary>
+    /// Map user-facing browser id to Playwright install package and codegen CLI flags.
+    /// Edge uses channel msedge (not a separate Playwright browser family).
+    /// </summary>
+    private static (string InstallTarget, string CodegenBrowserArgs, string DisplayName) ResolvePlaywrightBrowser(string browser) =>
+        browser switch
+        {
+            "firefox" => ("firefox", "--browser=firefox", "Firefox"),
+            "edge" => ("msedge", "--channel=msedge", "Edge"),
+            _ => ("chromium", "--browser=chromium", "Chromium"),
+        };
+
     private void UpdateSecretName()
     {
         SecretNameText.Text = SecretName;
@@ -55,14 +81,16 @@ public partial class MainWindow : Window
             StatusText.Text = "正在確認 Node.js 相依套件…";
             await RunProcessAsync(NodeCommandPath("npm"), "install", _workspace);
 
-            StatusText.Text = "正在確認 Chromium…";
-            await RunProcessAsync(NodeCommandPath("npx"), "playwright install chromium", _workspace);
+            var browser = LoginBrowser;
+            var (installTarget, codegenBrowserArgs, displayName) = ResolvePlaywrightBrowser(browser);
+            StatusText.Text = $"正在確認 {displayName}…";
+            await RunProcessAsync(NodeCommandPath("npx"), $"playwright install {installTarget}", _workspace);
 
             if (File.Exists(StateFile)) File.Delete(StateFile);
-            StatusText.Text = "瀏覽器已開啟。請完成 OiiOii 登入，確認成功後關閉瀏覽器視窗。";
+            StatusText.Text = $"已開啟 {displayName}。請完成 OiiOii 登入，確認成功後關閉瀏覽器視窗。";
             await RunProcessAsync(
                 NodeCommandPath("npx"),
-                $"playwright codegen --save-storage=\"auth-{AccountNumber:00}.json\" {OiiOiiUrl}",
+                $"playwright codegen {codegenBrowserArgs} --save-storage=\"auth-{AccountNumber:00}.json\" {OiiOiiUrl}",
                 _workspace);
 
             if (!File.Exists(StateFile))
@@ -96,8 +124,10 @@ public partial class MainWindow : Window
         DashboardStatusText.Text = "正在送出 GitHub Actions 手動執行請求…";
         try
         {
-            await _githubActions.TriggerClaimAsync();
-            DashboardStatusText.Text = "已觸發每日領取 workflow。啟動後按「更新執行結果」即可查看帳號進度。";
+            var browser = DashboardBrowser;
+            await _githubActions.TriggerClaimAsync(browser);
+            DashboardStatusText.Text =
+                $"已觸發每日領取 workflow（瀏覽器：{browser}）。啟動後按「更新執行結果」即可查看帳號進度。";
         }
         catch (Exception exception)
         {

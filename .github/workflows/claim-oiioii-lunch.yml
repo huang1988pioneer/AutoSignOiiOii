@@ -1,0 +1,29 @@
+name: Claim OiiOii daily lunch
+
+on:
+  schedule:
+    # 00:10 UTC = 08:10 Asia/Taipei. GitHub Actions schedules use UTC.
+    - cron: '10 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  claim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      OII_STORAGE_STATE_B64: ${{ secrets.OII_STORAGE_STATE_B64 }}
+      OII_COOKIE: ${{ secrets.OII_COOKIE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Claim daily lunch
+        run: npm run claim

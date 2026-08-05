@@ -1,0 +1,13 @@
+{
+  "name": "oiioii-daily-lunch",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "claim": "node scripts/claim-lunch.mjs",
+    "check": "node --check scripts/claim-lunch.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0"
+  }
+}

@@ -2,7 +2,8 @@ name: Claim OiiOii daily lunch
 
 on:
   schedule:
-    # 00:10 UTC = 08:10 Asia/Taipei. GitHub Actions schedules use UTC.
+    # OiiOii daily 盒飯 refreshes at UTC 00:00. Run shortly after.
+    # 00:10 UTC = 08:10 Asia/Taipei
     - cron: '10 0 * * *'
   workflow_dispatch:
 
@@ -12,7 +13,7 @@ permissions:
 jobs:
   claim:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -37,7 +38,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Claim daily lunch
+      - name: Claim daily 盒飯
         run: |
           if [ -z "$OII_STORAGE_STATE_B64" ] && [ -z "$OII_COOKIE" ]; then
             echo "Account $OII_ACCOUNT_NAME is not configured; skipping."
@@ -45,11 +46,11 @@ jobs:
           fi
           npm run claim
 
-      - name: Upload screenshots (on failure)
-        if: failure()
+      - name: Upload screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: oiioii-debug-screenshots
+          name: oiioii-screenshots-account-${{ matrix.account }}-${{ github.run_id }}
           path: screenshots/
           retention-days: 7
           if-no-files-found: ignore

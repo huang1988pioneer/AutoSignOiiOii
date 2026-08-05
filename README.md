@@ -2,7 +2,12 @@
 
 ## OiiOii 每日盒飯自動領取 — GitHub Action
 
-每天 **08:10（台北時間）** 自動執行，使用你已登入的 OiiOii 狀態嘗試領取每日盒飯。也可在 GitHub **Actions → Claim OiiOii daily lunch → Run workflow** 手動觸發。
+每天 **08:10（台北時間 / UTC 00:10）** 自動執行，使用你已登入的 OiiOii 狀態嘗試領取每日盒飯。  
+也可在 GitHub **Actions → Claim OiiOii daily lunch → Run workflow** 手動觸發。
+
+倉庫：https://github.com/huang1988pioneer/AutoSignOiiOii
+
+> OiiOii 每日簽到盒飯於 **UTC 00:00** 刷新。本 workflow 在刷新後約 10 分鐘執行。
 
 ---
 
@@ -15,10 +20,10 @@ OiiOii 使用手機 OTP、Google 或企業帳戶登入。GitHub Action **不會�
 #### 方法 A — Playwright Storage State（推薦）
 
 ```bash
-npx playwright codegen --save-storage=auth.json https://www.oiioii.ai/
+npx playwright codegen --save-storage=auth.json https://www.oiioii.ai/zh-Hant/
 ```
 
-在彈出的瀏覽器中完成登入，然後關閉瀏覽器，`auth.json` 會自動保存。
+在彈出的瀏覽器中完成登入，確認已進入主畫面後關閉瀏覽器，`auth.json` 會自動保存。
 
 將 `auth.json` 轉為 Base64：
 
@@ -32,11 +37,11 @@ base64 -w0 auth.json
 
 #### 方法 B — Cookie Header
 
-使用瀏覽器開發者工具（F12 → Network → 找到對 oiioii.ai 的請求 → 複製 Cookie header）。
+使用瀏覽器開發者工具（F12 → Network → 找到對 `oiioii.ai` 的請求 → 複製完整 Cookie header）。
 
 ### 2. 設定 GitHub Secrets
 
-前往你的 GitHub 儲存庫 **Settings → Secrets and variables → Actions**，為每個帳號新增以下其中一個 Secret：
+前往儲存庫 **Settings → Secrets and variables → Actions**，為每個帳號新增以下其中一個 Secret：
 
 | Secret 名稱 | 說明 |
 | --- | --- |
@@ -47,17 +52,23 @@ Action 最多支援三個帳號。每個編號只需設定上述其中一種 Sec
 
 > ⚠️ **安全提醒**：不要把 cookie、storage state 或帳號密碼提交到 Git。
 
+### 3. 啟用並測試
+
+1. 確認 workflow 檔案已在 `main`：`.github/workflows/claim-oiioii-lunch.yml`
+2. 到 **Actions → Claim OiiOii daily lunch → Run workflow** 手動跑一次
+3. 成功後即可靠每日排程自動領取
+
 ---
 
 ## 重要行為
 
 - ✅ 自動偵測登入狀態，若已過期會明確提示你更新 Secret
-- ✅ 只點擊可辨識為「每日簽到／領取盒飯」的按鈕
-- ✅ 支援中文與英文介面
+- ✅ 優先尋找可辨識為「每日簽到／領取盒飯」的控制項
+- ✅ 支援繁中、簡中與英文介面
 - ✅ 失敗時會自動重試（預設最多 3 次）
-- ✅ 失敗時上傳截圖到 Workflow Artifacts 供除錯
+- ✅ 每次執行上傳截圖 Artifact 供除錯
 - ❌ 不會嘗試破解 OTP、Google 驗證或 CAPTCHA
-- ❌ 遇到多個候選按鈕時會謹慎處理，避免誤點付費或訂閱按鈕
+- ❌ 會避開訂閱／購買等付費按鈕
 
 ---
 
@@ -82,6 +93,8 @@ npm run claim
 npm install
 npx playwright install chromium
 $env:OII_COOKIE = 'session=...'
+# 或
+# $env:OII_STORAGE_STATE_B64 = '...'
 npm run claim
 ```
 
@@ -93,6 +106,7 @@ npm run claim
 | --- | --- | --- |
 | `OII_STORAGE_STATE_B64` | — | Playwright storage state 的 Base64 |
 | `OII_COOKIE` | — | Cookie header 字串 |
+| `OII_ACCOUNT_NAME` | `default` | 日誌／截圖用帳號標籤 |
 | `OII_MAX_RETRIES` | `3` | 最大重試次數 |
 | `OII_SCREENSHOT_DIR` | `./screenshots` | 截圖存放路徑 |
 
@@ -100,11 +114,14 @@ npm run claim
 
 ## 疑難排解
 
-1. **Workflow 失敗並顯示 "expired"**
+1. **Workflow 失敗並顯示 "expired"**  
    → 登入狀態已過期，重新執行方法 A 或 B 取得新的 cookie/state 並更新 Secret。
 
-2. **Workflow 失敗並顯示 "No daily-lunch claim button"**
+2. **Workflow 失敗並顯示 "No daily 盒飯 claim control"**  
    → OiiOii 可能改版了 UI。下載 Artifacts 中的截圖查看，更新 `scripts/claim-lunch.mjs` 中的選擇器。
 
-3. **Schedule 沒有自動執行**
+3. **Schedule 沒有自動執行**  
    → GitHub Actions 對 60 天內沒有活動的 repo 會暫停 cron，推送一個 commit 或手動跑一次即可恢復。
+
+4. **Cookie 很快失效**  
+   → 改用方法 A（storage state，通常含 localStorage／更多 session 資訊），並避免在瀏覽器中同時登出。

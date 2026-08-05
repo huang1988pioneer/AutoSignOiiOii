@@ -106,12 +106,12 @@ npm run check
 | `OII_MAX_RETRIES` | `3` | 最大嘗試次數 |
 | `OII_SCREENSHOT_DIR` | `./screenshots` | 截圖輸出資料夾 |
 
-## 桌面登入工具（Windows）
+## 桌面登入工具（macOS、Linux、Windows）
 
 專案內含 Avalonia 桌面工具，可協助建立並複製 Storage State：
 
-```powershell
-dotnet run --project .\OiiOiiFlow\OiiOiiFlow.csproj
+```bash
+dotnet run --project OiiOiiFlow/OiiOiiFlow.csproj
 ```
 
 1. 選擇帳號編號，按下建立登入狀態。

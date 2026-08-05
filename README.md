@@ -1,143 +1,122 @@
 # AutoSignOiiOii
 
-## OiiOii 每日盒飯自動領取 — GitHub Action
+使用 GitHub Actions 自動領取 OiiOii 每日盒飯。工作流程會在每日台北時間 **08:10** 執行，也可以手動觸發；支援最多三個帳號，並在失敗時保留截圖以利排查。
 
-每天 **08:10（台北時間 / UTC 00:10）** 自動執行，使用你已登入的 OiiOii 狀態嘗試領取每日盒飯。  
-也可在 GitHub **Actions → Claim OiiOii daily lunch → Run workflow** 手動觸發。
+> OiiOii 的每日獎勵於 UTC 00:00（台北時間 08:00）重置，因此排程設在 10 分鐘後執行。
 
-倉庫：https://github.com/huang1988pioneer/AutoSignOiiOii
+## 功能
 
-> OiiOii 每日簽到盒飯於 **UTC 00:00** 刷新。本 workflow 在刷新後約 10 分鐘執行。
+- 每日自動執行，或從 GitHub Actions 手動執行
+- 支援 1～3 個 OiiOii 帳號
+- 優先使用 Playwright Storage State，也可使用 Cookie Header
+- 找不到按鈕或暫時失敗時，最多重試 3 次
+- 自動上傳執行截圖為 Artifact，保留 7 天
+- 不會嘗試繞過 OTP、Google 登入或 CAPTCHA
 
----
-
-## 設定步驟
+## 設定 GitHub Actions
 
 ### 1. 取得登入狀態
 
-OiiOii 使用手機 OTP、Google 或企業帳戶登入。GitHub Action **不會也不能**繞過這些驗證流程。你需要手動取得 cookie 或 storage state。
-
-#### 方法 A — Playwright Storage State（推薦）
+建議使用 Playwright Storage State。登入 OiiOii 後執行：
 
 ```bash
 npx playwright codegen --save-storage=auth.json https://www.oiioii.ai/zh-Hant/
 ```
 
-在彈出的瀏覽器中完成登入，確認已進入主畫面後關閉瀏覽器，`auth.json` 會自動保存。
-
-將 `auth.json` 轉為 Base64：
+完成登入後關閉瀏覽器，將 `auth.json` 轉為單行 Base64：
 
 ```bash
 # macOS / Linux
 base64 -w0 auth.json
 
 # Windows PowerShell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("auth.json"))
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('auth.json'))
 ```
 
-#### 方法 B — Cookie Header
+若無法使用 Storage State，也可在瀏覽器開發者工具的 Network 面板中，複製 `oiioii.ai` 請求的完整 `Cookie` header。
 
-使用瀏覽器開發者工具（F12 → Network → 找到對 `oiioii.ai` 的請求 → 複製完整 Cookie header）。
+### 2. 新增 Repository Secrets
 
-### 2. 設定 GitHub Secrets
+前往 GitHub 儲存庫的 **Settings → Secrets and variables → Actions**，建立下列 Secrets。
 
-前往儲存庫 **Settings → Secrets and variables → Actions**，為每個帳號新增以下其中一個 Secret：
-
-| Secret 名稱 | 說明 |
+| Secret | 用途 |
 | --- | --- |
-| `OII_STORAGE_STATE_B64_1` 至 `OII_STORAGE_STATE_B64_33` | 推薦。各帳號 Playwright `storageState` JSON 的 Base64 編碼 |
-| `OII_COOKIE_1` 至 `OII_COOKIE_33` | 備選。各帳號完整的 `Cookie` header，例如 `session=...; other_cookie=...` |
+| `OII_STORAGE_STATE_B64_1` | 帳號 1 的 Base64 Storage State（建議） |
+| `OII_COOKIE_1` | 帳號 1 的 Cookie Header（可替代 Storage State） |
+| `OII_STORAGE_STATE_B64_2`、`OII_COOKIE_2` | 帳號 2（選填） |
+| `OII_STORAGE_STATE_B64_3`、`OII_COOKIE_3` | 帳號 3（選填） |
 
-Action 最多支援 33 個帳號。每個編號只需設定上述其中一種 Secret；未設定的帳號會自動略過。例如使用兩個帳號時，只要設定 `OII_STORAGE_STATE_B64_1` 與 `OII_STORAGE_STATE_B64_2`。
+每個帳號只要設定其中一種登入方式即可，且 Storage State 優先。未設定 Secret 的帳號會自動略過。
 
-> ⚠️ **安全提醒**：不要把 cookie、storage state 或帳號密碼提交到 Git。
+請勿把 `auth.json`、Cookie 或任何登入憑證提交到儲存庫。
 
-### 3. 啟用並測試
+### 3. 手動驗證
 
-1. 確認 workflow 檔案已在 `main`：`.github/workflows/claim-oiioii-lunch.yml`
-2. 到 **Actions → Claim OiiOii daily lunch → Run workflow** 手動跑一次
-3. 成功後即可靠每日排程自動領取
+開啟儲存庫的 **Actions** 分頁，選擇 **Claim OiiOii daily lunch**，再按 **Run workflow**。執行完成後，可在該次 workflow 的 Artifacts 下載截圖。
 
----
+## 在本機執行
 
-## 重要行為
-
-- ✅ 自動偵測登入狀態，若已過期會明確提示你更新 Secret
-- ✅ 優先尋找可辨識為「每日簽到／領取盒飯」的控制項
-- ✅ 支援繁中、簡中與英文介面
-- ✅ 失敗時會自動重試（預設最多 3 次）
-- ✅ 每次執行上傳截圖 Artifact 供除錯
-- ❌ 不會嘗試破解 OTP、Google 驗證或 CAPTCHA
-- ❌ 會避開訂閱／購買等付費按鈕
-
----
-
-## 本機測試
+需求：Node.js 22（CI 使用版本）與可安裝 Chromium 的環境。
 
 ```bash
 npm install
 npx playwright install chromium
 
-# 方式一：使用 Cookie
+# 二選一：設定 Cookie 或 Storage State
 export OII_COOKIE='session=...'
-
-# 方式二：使用 Storage State
-export OII_STORAGE_STATE_B64='...'
+# export OII_STORAGE_STATE_B64='...'
 
 npm run claim
 ```
 
-### PowerShell
+PowerShell：
 
 ```powershell
 npm install
 npx playwright install chromium
 $env:OII_COOKIE = 'session=...'
-# 或
-# $env:OII_STORAGE_STATE_B64 = '...'
+# 或：$env:OII_STORAGE_STATE_B64 = '...'
+
 npm run claim
 ```
 
----
+可先檢查腳本語法：
 
-## 自訂設定
+```bash
+npm run check
+```
 
-| 環境變數 | 預設值 | 說明 |
+## 環境變數
+
+| 變數 | 預設值 | 說明 |
 | --- | --- | --- |
-| `OII_STORAGE_STATE_B64` | — | Playwright storage state 的 Base64 |
-| `OII_COOKIE` | — | Cookie header 字串 |
-| `OII_ACCOUNT_NAME` | `default` | 日誌／截圖用帳號標籤 |
-| `OII_MAX_RETRIES` | `3` | 最大重試次數 |
-| `OII_SCREENSHOT_DIR` | `./screenshots` | 截圖存放路徑 |
+| `OII_STORAGE_STATE_B64` | 無 | Base64 編碼的 Playwright Storage State JSON |
+| `OII_COOKIE` | 無 | 完整 Cookie Header |
+| `OII_ACCOUNT_NAME` | `default` | 用於日誌與截圖檔名的帳號識別 |
+| `OII_MAX_RETRIES` | `3` | 最大嘗試次數 |
+| `OII_SCREENSHOT_DIR` | `./screenshots` | 截圖輸出資料夾 |
 
----
+## 桌面登入工具（Windows）
 
-## Avalonia 登入流程工具
-
-若不想在終端機手動執行 Playwright，可使用桌面工具建立登入狀態：
+專案內含 Avalonia 桌面工具，可協助建立並複製 Storage State：
 
 ```powershell
 dotnet run --project .\OiiOiiFlow\OiiOiiFlow.csproj
 ```
 
-1. 在工具中選擇帳號 01–33；它會對應 `OII_STORAGE_STATE_B64_1` 至 `OII_STORAGE_STATE_B64_33`。
-2. 點擊「開始登入並建立狀態」，並在開啟的瀏覽器自行完成 OiiOii 登入。
-3. 確認進入 OiiOii 後關閉該瀏覽器。工具會將 Base64 登入狀態複製到剪貼簿，並顯示要建立的 GitHub Secret 名稱。
+1. 選擇帳號編號，按下建立登入狀態。
+2. 在開啟的瀏覽器完成 OiiOii 登入，然後關閉瀏覽器。
+3. 在工具中讀取並複製 Base64，貼入相同編號的 GitHub Secret。
 
-工具不會顯示或儲存帳密；請勿把 `auth-N.json` 或剪貼簿中的 Base64 提交至 Git。
-
----
+工具可建立 `01` 至 `33` 編號的登入狀態，但目前 workflow 僅會執行帳號 `1`、`2`、`3`；請使用這三個編號。
 
 ## 疑難排解
 
-1. **Workflow 失敗並顯示 "expired"**  
-   → 登入狀態已過期，重新執行方法 A 或 B 取得新的 cookie/state 並更新 Secret。
+- **登入狀態過期**：重新取得 Storage State 或 Cookie，並更新對應的 GitHub Secret。
+- **找不到每日領取按鈕**：到 workflow 的 Artifact 查看截圖；OiiOii 的 UI 若有變更，可能需要調整 `scripts/claim-lunch.mjs` 的選擇器。
+- **排程沒有準時執行**：GitHub Actions 的排程可能延遲，尤其在整點附近；可先手動執行驗證設定。
+- **需要 OTP、Google 登入或 CAPTCHA**：先在本機正常完成登入，再更新 Storage State／Cookie；此專案不會自動繞過驗證。
 
-2. **Workflow 失敗並顯示 "No daily 盒飯 claim control"**  
-   → OiiOii 可能改版了 UI。下載 Artifacts 中的截圖查看，更新 `scripts/claim-lunch.mjs` 中的選擇器。
+## 安全提醒
 
-3. **Schedule 沒有自動執行**  
-   → GitHub Actions 對 60 天內沒有活動的 repo 會暫停 cron，推送一個 commit 或手動跑一次即可恢復。
-
-4. **Cookie 很快失效**  
-   → 改用方法 A（storage state，通常含 localStorage／更多 session 資訊），並避免在瀏覽器中同時登出。
+登入憑證等同帳號存取權。僅將它們放在 GitHub Secrets 或本機環境變數中，並在懷疑外洩時立即撤銷登入工作階段與更新憑證。

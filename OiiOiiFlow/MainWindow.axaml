@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="OiiOiiFlow.MainWindow"
-        Width="920" Height="680" MinWidth="760" MinHeight="580"
+        Width="920" Height="840" MinWidth="760" MinHeight="680"
         Title="OiiOii Flow — 登入狀態擷取器"
         Background="#F6F8FA">
   <Window.Styles>
@@ -28,31 +28,48 @@
           <TextBlock Text="流程" FontWeight="SemiBold" Foreground="#B8D8D4" />
           <TextBlock Text="01  選擇帳號" Foreground="White" />
           <TextBlock Text="02  完成官方登入" Foreground="#B8D8D4" />
-          <TextBlock Text="03  複製 Secret" Foreground="#B8D8D4" />
+          <TextBlock Text="03  複製登入狀態" Foreground="#B8D8D4" />
         </StackPanel>
         <TextBlock Margin="0,20,0,0" Text="Google、OTP 與 CAPTCHA 皆由你在瀏覽器中自行完成。" TextWrapping="Wrap" FontSize="12" Foreground="#9FC5C0" />
       </StackPanel>
     </Border>
 
-    <ScrollViewer Grid.Column="1" Margin="34">
-      <StackPanel Spacing="18" MaxWidth="590">
+    <ScrollViewer Grid.Column="1"
+                  Margin="34,34,18,18"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="18" MaxWidth="590" Margin="0,0,16,24">
         <StackPanel Spacing="5">
           <TextBlock Classes="eyebrow" Text="GITHUB ACTION SETUP" />
           <TextBlock Text="建立帳號登入狀態" FontSize="28" FontWeight="SemiBold" Foreground="#172B36" />
-          <TextBlock Classes="muted" Text="選擇帳號後，工具會依序準備 Playwright、開啟 OiiOii 登入頁，並在你關閉瀏覽器後完成轉換。" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" Text="選擇帳號後，工具會依序準備 Playwright、開啟 OiiOii 登入頁；關閉瀏覽器後，再由你確認複製登入狀態。" TextWrapping="Wrap" />
         </StackPanel>
 
         <Border Classes="panel">
           <Grid ColumnDefinitions="42,*" RowDefinitions="Auto,Auto">
             <TextBlock Classes="stepNumber" Text="01" VerticalAlignment="Center" />
-            <StackPanel Grid.Column="1" Spacing="9">
+            <StackPanel Grid.Column="1" Spacing="12">
               <TextBlock Text="選擇 GitHub Secret 編號" FontWeight="SemiBold" FontSize="16" />
               <StackPanel Orientation="Horizontal" Spacing="12">
-                <ComboBox x:Name="AccountComboBox" Width="130" SelectedIndex="0" />
+                <StackPanel Spacing="4">
+                  <ComboBox x:Name="AccountComboBox" Width="130" SelectedIndex="0" />
+                  <TextBlock x:Name="AccountAliasText" Classes="muted" FontSize="12" IsVisible="False" />
+                </StackPanel>
                 <Border Background="#E7F5F2" CornerRadius="6" Padding="12,7">
                   <TextBlock x:Name="SecretNameText" Text="OII_STORAGE_STATE_B64_1" Foreground="#0A5A54" FontFamily="Consolas" />
                 </Border>
               </StackPanel>
+              <Expander Header="帳號別名一覽" IsExpanded="False">
+                <Border Background="#F6F8FA" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                  <StackPanel Spacing="8">
+                    <TextBlock Classes="muted" Text="名稱僅儲存在這台電腦的使用者設定中。" FontSize="12" />
+                    <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                      <StackPanel x:Name="AliasListPanel" Spacing="6" />
+                    </ScrollViewer>
+                    <Button HorizontalAlignment="Left" Click="SaveAliasesButton_OnClick">儲存帳號別名</Button>
+                  </StackPanel>
+                </Border>
+              </Expander>
             </StackPanel>
           </Grid>
         </Border>
@@ -72,9 +89,12 @@
           <Grid ColumnDefinitions="42,*">
             <TextBlock Classes="stepNumber" Text="03" VerticalAlignment="Top" />
             <StackPanel Grid.Column="1" Spacing="8">
-              <TextBlock Text="儲存至 GitHub Secrets" FontWeight="SemiBold" FontSize="16" />
-              <TextBlock x:Name="ResultText" Classes="muted" Text="完成後會自動將 Base64 複製到剪貼簿；請貼到對應的 GitHub Repository Secret。" TextWrapping="Wrap" />
-              <Button x:Name="CopySecretNameButton" IsEnabled="False" HorizontalAlignment="Left" Click="CopySecretNameButton_OnClick">複製 Secret 名稱</Button>
+              <TextBlock Text="複製登入狀態至剪貼簿" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock x:Name="ResultText" Classes="muted" Text="登入完成並關閉瀏覽器後，讀取 auth-N.json 並複製 Base64 至剪貼簿。" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button x:Name="CopyStateButton" Classes="primary" IsEnabled="False" Click="CopyStateButton_OnClick">讀取並複製登入狀態</Button>
+                <Button x:Name="CopySecretNameButton" IsEnabled="False" Click="CopySecretNameButton_OnClick">複製 Secret 名稱</Button>
+              </StackPanel>
             </StackPanel>
           </Grid>
         </Border>

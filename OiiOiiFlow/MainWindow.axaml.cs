@@ -53,15 +53,15 @@ public partial class MainWindow : Window
         try
         {
             StatusText.Text = "正在確認 Node.js 相依套件…";
-            await RunProcessAsync(NodeCommandPath("npm.cmd"), "install", _workspace);
+            await RunProcessAsync(NodeCommandPath("npm"), "install", _workspace);
 
             StatusText.Text = "正在確認 Chromium…";
-            await RunProcessAsync(NodeCommandPath("npx.cmd"), "playwright install chromium", _workspace);
+            await RunProcessAsync(NodeCommandPath("npx"), "playwright install chromium", _workspace);
 
             if (File.Exists(StateFile)) File.Delete(StateFile);
             StatusText.Text = "瀏覽器已開啟。請完成 OiiOii 登入，確認成功後關閉瀏覽器視窗。";
             await RunProcessAsync(
-                NodeCommandPath("npx.cmd"),
+                NodeCommandPath("npx"),
                 $"playwright codegen --save-storage=\"auth-{AccountNumber:00}.json\" {OiiOiiUrl}",
                 _workspace);
 
@@ -358,10 +358,15 @@ public partial class MainWindow : Window
 
     private static string NodeCommandPath(string commandName)
     {
+        if (!OperatingSystem.IsWindows()) return commandName;
+
         var nodeDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
             "nodejs");
-        var commandPath = Path.Combine(nodeDirectory, commandName);
+        var executableName = commandName.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+            ? commandName
+            : $"{commandName}.cmd";
+        var commandPath = Path.Combine(nodeDirectory, executableName);
         return File.Exists(commandPath) ? commandPath : commandName;
     }
 
@@ -370,8 +375,50 @@ public partial class MainWindow : Window
         foreach (var startPath in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory }.Distinct())
         {
             for (var directory = new DirectoryInfo(startPath); directory is not null; directory = directory.Parent)
-                if (File.Exists(Path.Combine(directory.FullName, "package.json"))) return directory.FullName;
+                if (File.Exists(Path.Combine(directory.FullName, "package.json")) && IsWritableDirectory(directory.FullName))
+                    return directory.FullName;
         }
-        return Environment.CurrentDirectory;
+
+        var workspace = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "OiiOiiFlow",
+            "workspace");
+        Directory.CreateDirectory(workspace);
+        EnsureNodeProjectFiles(workspace);
+        return workspace;
+    }
+
+    private static bool IsWritableDirectory(string directory)
+    {
+        try
+        {
+            var probe = Path.Combine(directory, $".oiioii-flow-write-test-{Guid.NewGuid():N}");
+            File.WriteAllText(probe, string.Empty);
+            File.Delete(probe);
+            return true;
+        }
+        catch (Exception) when (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux() || OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+    }
+
+    private static void EnsureNodeProjectFiles(string workspace)
+    {
+        var packageJson = Path.Combine(workspace, "package.json");
+        if (!File.Exists(packageJson))
+        {
+            File.WriteAllText(packageJson, """
+            {
+              "name": "oiioii-flow-login-workspace",
+              "private": true,
+              "version": "1.0.0",
+              "type": "module",
+              "devDependencies": {
+                "playwright": "1.55.0"
+              }
+            }
+            """);
+        }
     }
 }

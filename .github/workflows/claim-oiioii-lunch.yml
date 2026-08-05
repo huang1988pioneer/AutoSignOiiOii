@@ -12,18 +12,44 @@ permissions:
 jobs:
   claim:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        account: [1, 2, 3]
     env:
-      OII_STORAGE_STATE_B64: ${{ secrets.OII_STORAGE_STATE_B64 }}
-      OII_COOKIE: ${{ secrets.OII_COOKIE }}
+      OII_ACCOUNT_NAME: ${{ matrix.account }}
+      OII_STORAGE_STATE_B64: ${{ secrets[format('OII_STORAGE_STATE_B64_{0}', matrix.account)] }}
+      OII_COOKIE: ${{ secrets[format('OII_COOKIE_{0}', matrix.account)] }}
+      OII_MAX_RETRIES: '3'
+      OII_SCREENSHOT_DIR: './screenshots'
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: npm ci --ignore-scripts
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+
       - name: Claim daily lunch
-        run: npm run claim
+        run: |
+          if [ -z "$OII_STORAGE_STATE_B64" ] && [ -z "$OII_COOKIE" ]; then
+            echo "Account $OII_ACCOUNT_NAME is not configured; skipping."
+            exit 0
+          fi
+          npm run claim
+
+      - name: Upload screenshots (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oiioii-debug-screenshots
+          path: screenshots/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -1,4 +1,6 @@
-# OiiOii 每日盒飯 GitHub Action
+# AutoSignOiiOii
+
+## OiiOii 每日盒飯 GitHub Action
 
 每天 08:10（台北時間）執行一次，使用你已登入的 OiiOii 狀態嘗試領取每日盒飯；也可在 GitHub 的 **Actions → Claim OiiOii daily lunch → Run workflow** 手動執行。
 

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 
 namespace OiiOiiFlow;
@@ -12,6 +13,7 @@ public partial class MainWindow : Window
     private const string OiiOiiUrl = "https://www.oiioii.ai/";
     private const int AccountCount = 33;
     private readonly string _workspace = FindWorkspace();
+    private readonly GitHubActionsService _githubActions = new();
     private readonly Dictionary<int, TextBox> _aliasInputs = new();
     private readonly Dictionary<int, string> _accountAliases = LoadAccountAliases();
 
@@ -87,6 +89,117 @@ public partial class MainWindow : Window
         StatusText.Text = $"已複製 {SecretName}。";
     }
 
+    private async void TriggerClaimButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        TriggerClaimButton.IsEnabled = false;
+        RefreshDashboardButton.IsEnabled = false;
+        DashboardStatusText.Text = "正在送出 GitHub Actions 手動執行請求…";
+        try
+        {
+            await _githubActions.TriggerClaimAsync();
+            DashboardStatusText.Text = "已觸發每日領取 workflow。啟動後按「更新執行結果」即可查看帳號進度。";
+        }
+        catch (Exception exception)
+        {
+            DashboardStatusText.Text = $"無法觸發 workflow：{exception.Message}";
+        }
+        finally
+        {
+            TriggerClaimButton.IsEnabled = true;
+            RefreshDashboardButton.IsEnabled = true;
+        }
+    }
+
+    private void DashboardNavButton_OnClick(object? sender, RoutedEventArgs e) => ShowView(DashboardView);
+
+    private void AccountNavButton_OnClick(object? sender, RoutedEventArgs e) => ShowView(AccountView);
+
+    private void LoginNavButton_OnClick(object? sender, RoutedEventArgs e) => ShowView(LoginView);
+
+    private void ShowView(Control view)
+    {
+        DashboardView.IsVisible = view == DashboardView;
+        AccountView.IsVisible = view == AccountView;
+        LoginView.IsVisible = view == LoginView;
+        view.BringIntoView();
+    }
+
+    private async void RefreshDashboardButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        TriggerClaimButton.IsEnabled = false;
+        RefreshDashboardButton.IsEnabled = false;
+        DashboardStatusText.Text = "正在讀取 GitHub Actions 執行紀錄…";
+        try
+        {
+            var pointsPerClaim = ParsePointsPerClaim();
+            var snapshot = await _githubActions.GetSnapshotAsync(pointsPerClaim);
+            RenderDashboard(snapshot);
+        }
+        catch (Exception exception)
+        {
+            DashboardStatusText.Text = $"無法讀取 GitHub Actions：{exception.Message}";
+        }
+        finally
+        {
+            TriggerClaimButton.IsEnabled = true;
+            RefreshDashboardButton.IsEnabled = true;
+        }
+    }
+
+    private decimal ParsePointsPerClaim()
+    {
+        if (decimal.TryParse(PointsPerClaimTextBox.Text, out var points) && points >= 0) return points;
+        PointsPerClaimTextBox.Text = "20";
+        return 20;
+    }
+
+    private void RenderDashboard(DashboardSnapshot snapshot)
+    {
+        SuccessfulAccountsMetric.Text = $"{snapshot.SuccessfulAccounts.Length} 個";
+        ConsecutiveDaysMetric.Text = $"{snapshot.ConsecutiveDays} 天";
+        MonthlyPointsMetric.Text = snapshot.MonthlyClaimedPoints.ToString("0.##");
+
+        if (snapshot.LatestRun is null)
+        {
+            DashboardStatusText.Text = "找不到每日領取 workflow 的執行紀錄。";
+            ActionAccountResultsPanel.Children.Clear();
+            return;
+        }
+
+        var runStatus = string.IsNullOrWhiteSpace(snapshot.LatestRun.Conclusion)
+            ? snapshot.LatestRun.Status
+            : snapshot.LatestRun.Conclusion;
+        var unconfiguredCount = snapshot.Accounts.Count(account => !account.IsConfigured);
+        DashboardStatusText.Text =
+            $"最近執行：{snapshot.LatestRun.CreatedAt.LocalDateTime:g} · {runStatus} · " +
+            $"成功 {snapshot.SuccessfulAccounts.Length} 個、失敗 {snapshot.FailedAccounts.Length} 個、未設定 {unconfiguredCount} 個。";
+
+        ActionAccountResultsPanel.Children.Clear();
+        foreach (var account in snapshot.Accounts)
+        {
+            var alias = account.IsConfigured
+                ? _accountAliases.GetValueOrDefault(account.Number) ?? account.Alias
+                : "未設定帳號";
+            var result = !account.IsConfigured
+                ? "尚未設定登入狀態"
+                : account.IsSuccessful
+                ? "登入有效、領取流程成功"
+                : account.IsCompleted ? "登入或領取流程失敗" : "尚在執行或未設定";
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("78,160,*") };
+            row.Children.Add(new TextBlock { Text = $"帳號 {account.Number:00}", FontWeight = Avalonia.Media.FontWeight.SemiBold });
+            var aliasText = new TextBlock { Text = alias, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
+            Grid.SetColumn(aliasText, 1);
+            row.Children.Add(aliasText);
+            var stateText = new TextBlock { Text = result };
+            Grid.SetColumn(stateText, 2);
+            row.Children.Add(stateText);
+            ActionAccountResultsPanel.Children.Add(row);
+        }
+
+        if (snapshot.Accounts.Length == 0)
+            ActionAccountResultsPanel.Children.Add(new TextBlock { Text = "最新 run 尚未建立帳號 job；請稍後再更新。" });
+    }
+
     private async void CopyStateButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var stateFile = ExistingStateFile();
@@ -98,6 +211,13 @@ public partial class MainWindow : Window
         }
 
         var encoded = Convert.ToBase64String(await File.ReadAllBytesAsync(stateFile));
+        var duplicateAccounts = await FindDuplicateStateFilesAsync(encoded);
+        if (duplicateAccounts.Count > 0)
+        {
+            ResultText.Text = $"偵測到與帳號 {string.Join("、", duplicateAccounts.Select(number => number.ToString("00")))} 相同的登入狀態，未複製到剪貼簿。";
+            StatusText.Text = "請使用不同的 OiiOii 帳號重新登入後再建立狀態，避免重複領取。";
+            return;
+        }
         if (Clipboard is { } clipboard) await clipboard.SetTextAsync(encoded);
         ResultText.Text = $"已複製 {Path.GetFileName(stateFile)} 的 Base64（{encoded.Length:N0} 個字元）。貼到 GitHub Repository Secret：{SecretName}。";
         StatusText.Text = "登入狀態已複製；請勿將其貼入聊天訊息或提交到 Git。";
@@ -112,7 +232,7 @@ public partial class MainWindow : Window
             var input = new TextBox
             {
                 Width = 330,
-                Watermark = "帳號名稱（可留白）",
+                PlaceholderText = "帳號名稱（可留白）",
                 Text = _accountAliases.GetValueOrDefault(number) ?? string.Empty,
             };
             var accountNumber = number;
@@ -152,6 +272,23 @@ public partial class MainWindow : Window
     {
         if (File.Exists(StateFile)) return StateFile;
         return File.Exists(LegacyStateFile) ? LegacyStateFile : null;
+    }
+
+    private async Task<IReadOnlyList<int>> FindDuplicateStateFilesAsync(string currentState)
+    {
+        var duplicates = new List<int>();
+        foreach (var file in Directory.EnumerateFiles(_workspace, "auth-*.json"))
+        {
+            if (string.Equals(file, StateFile, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(file, LegacyStateFile, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var suffix = Path.GetFileNameWithoutExtension(file)["auth-".Length..];
+            if (!int.TryParse(suffix, out var accountNumber)) continue;
+            if (Convert.ToBase64String(await File.ReadAllBytesAsync(file)) == currentState)
+                duplicates.Add(accountNumber);
+        }
+        return duplicates;
     }
 
     private static string AliasFile => Path.Combine(

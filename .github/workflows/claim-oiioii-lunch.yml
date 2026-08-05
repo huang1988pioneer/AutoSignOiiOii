@@ -10,6 +10,108 @@ permissions:
   contents: read
 
 jobs:
+  validate-storage-states:
+    name: Validate account session states
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      OII_STORAGE_STATE_B64_1: ${{ secrets.OII_STORAGE_STATE_B64_1 }}
+      OII_STORAGE_STATE_B64_2: ${{ secrets.OII_STORAGE_STATE_B64_2 }}
+      OII_STORAGE_STATE_B64_3: ${{ secrets.OII_STORAGE_STATE_B64_3 }}
+      OII_STORAGE_STATE_B64_4: ${{ secrets.OII_STORAGE_STATE_B64_4 }}
+      OII_STORAGE_STATE_B64_5: ${{ secrets.OII_STORAGE_STATE_B64_5 }}
+      OII_STORAGE_STATE_B64_6: ${{ secrets.OII_STORAGE_STATE_B64_6 }}
+      OII_STORAGE_STATE_B64_7: ${{ secrets.OII_STORAGE_STATE_B64_7 }}
+      OII_STORAGE_STATE_B64_8: ${{ secrets.OII_STORAGE_STATE_B64_8 }}
+      OII_STORAGE_STATE_B64_9: ${{ secrets.OII_STORAGE_STATE_B64_9 }}
+      OII_STORAGE_STATE_B64_10: ${{ secrets.OII_STORAGE_STATE_B64_10 }}
+      OII_STORAGE_STATE_B64_11: ${{ secrets.OII_STORAGE_STATE_B64_11 }}
+      OII_STORAGE_STATE_B64_12: ${{ secrets.OII_STORAGE_STATE_B64_12 }}
+      OII_STORAGE_STATE_B64_13: ${{ secrets.OII_STORAGE_STATE_B64_13 }}
+      OII_STORAGE_STATE_B64_14: ${{ secrets.OII_STORAGE_STATE_B64_14 }}
+      OII_STORAGE_STATE_B64_15: ${{ secrets.OII_STORAGE_STATE_B64_15 }}
+      OII_STORAGE_STATE_B64_16: ${{ secrets.OII_STORAGE_STATE_B64_16 }}
+      OII_STORAGE_STATE_B64_17: ${{ secrets.OII_STORAGE_STATE_B64_17 }}
+      OII_STORAGE_STATE_B64_18: ${{ secrets.OII_STORAGE_STATE_B64_18 }}
+      OII_STORAGE_STATE_B64_19: ${{ secrets.OII_STORAGE_STATE_B64_19 }}
+      OII_STORAGE_STATE_B64_20: ${{ secrets.OII_STORAGE_STATE_B64_20 }}
+      OII_STORAGE_STATE_B64_21: ${{ secrets.OII_STORAGE_STATE_B64_21 }}
+      OII_STORAGE_STATE_B64_22: ${{ secrets.OII_STORAGE_STATE_B64_22 }}
+      OII_STORAGE_STATE_B64_23: ${{ secrets.OII_STORAGE_STATE_B64_23 }}
+      OII_STORAGE_STATE_B64_24: ${{ secrets.OII_STORAGE_STATE_B64_24 }}
+      OII_STORAGE_STATE_B64_25: ${{ secrets.OII_STORAGE_STATE_B64_25 }}
+      OII_STORAGE_STATE_B64_26: ${{ secrets.OII_STORAGE_STATE_B64_26 }}
+      OII_STORAGE_STATE_B64_27: ${{ secrets.OII_STORAGE_STATE_B64_27 }}
+      OII_STORAGE_STATE_B64_28: ${{ secrets.OII_STORAGE_STATE_B64_28 }}
+      OII_STORAGE_STATE_B64_29: ${{ secrets.OII_STORAGE_STATE_B64_29 }}
+      OII_STORAGE_STATE_B64_30: ${{ secrets.OII_STORAGE_STATE_B64_30 }}
+      OII_STORAGE_STATE_B64_31: ${{ secrets.OII_STORAGE_STATE_B64_31 }}
+      OII_STORAGE_STATE_B64_32: ${{ secrets.OII_STORAGE_STATE_B64_32 }}
+      OII_STORAGE_STATE_B64_33: ${{ secrets.OII_STORAGE_STATE_B64_33 }}
+    steps:
+      - name: Notify duplicate login states
+        shell: bash
+        run: |
+          set -euo pipefail
+          names=(
+          OII_STORAGE_STATE_B64_1
+          OII_STORAGE_STATE_B64_2
+          OII_STORAGE_STATE_B64_3
+          OII_STORAGE_STATE_B64_4
+          OII_STORAGE_STATE_B64_5
+          OII_STORAGE_STATE_B64_6
+          OII_STORAGE_STATE_B64_7
+          OII_STORAGE_STATE_B64_8
+          OII_STORAGE_STATE_B64_9
+          OII_STORAGE_STATE_B64_10
+          OII_STORAGE_STATE_B64_11
+          OII_STORAGE_STATE_B64_12
+          OII_STORAGE_STATE_B64_13
+          OII_STORAGE_STATE_B64_14
+          OII_STORAGE_STATE_B64_15
+          OII_STORAGE_STATE_B64_16
+          OII_STORAGE_STATE_B64_17
+          OII_STORAGE_STATE_B64_18
+          OII_STORAGE_STATE_B64_19
+          OII_STORAGE_STATE_B64_20
+          OII_STORAGE_STATE_B64_21
+          OII_STORAGE_STATE_B64_22
+          OII_STORAGE_STATE_B64_23
+          OII_STORAGE_STATE_B64_24
+          OII_STORAGE_STATE_B64_25
+          OII_STORAGE_STATE_B64_26
+          OII_STORAGE_STATE_B64_27
+          OII_STORAGE_STATE_B64_28
+          OII_STORAGE_STATE_B64_29
+          OII_STORAGE_STATE_B64_30
+          OII_STORAGE_STATE_B64_31
+          OII_STORAGE_STATE_B64_32
+          OII_STORAGE_STATE_B64_33
+          )
+          duplicate=0
+          configured=0
+          for ((i = 0; i < ${#names[@]}; i++)); do
+            value="${!names[$i]}"
+            [[ -z "$value" ]] && continue
+            configured=$((configured + 1))
+            for ((j = 0; j < i; j++)); do
+              other="${!names[$j]}"
+              [[ -z "$other" ]] && continue
+              if [[ "$value" == "$other" ]]; then
+                echo "::error title=Duplicate OiiOii login state::${names[$j]} and ${names[$i]} have identical values. Update one Secret with a different account."
+                echo "- \`${names[$j]}\` and \`${names[$i]}\` are identical." >> "$GITHUB_STEP_SUMMARY"
+                duplicate=1
+              fi
+            done
+          done
+          if [[ "$duplicate" -ne 0 ]]; then
+            echo "## Duplicate OiiOii login state detected" >> "$GITHUB_STEP_SUMMARY"
+            echo "Claim jobs were not started. Replace the duplicate Secret with a different account's login state." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "## Login states validated" >> "$GITHUB_STEP_SUMMARY"
+          echo "Validated $configured configured storage states; no duplicates found." >> "$GITHUB_STEP_SUMMARY"
+
   random_start:
     name: Choose a random scheduled start time
     runs-on: ubuntu-latest
@@ -40,7 +142,7 @@ jobs:
 
   claim:
     name: claim (${{ matrix.account }}) - ${{ matrix.account == 1 && 'huang1988pioneer' || matrix.account == 2 && 'abuhg17' || matrix.account == 3 && 'goldshoot0720' || format('account-{0}', matrix.account) }}
-    needs: random_start
+    needs: [random_start, validate-storage-states]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:

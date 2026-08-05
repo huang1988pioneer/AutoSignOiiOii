@@ -17,40 +17,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        account: [1, 2, 3]
+        account: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]
     env:
-      OII_ACCOUNT_NAME: ${{ matrix.account }}
+      # OII_STORAGE_STATE_B64_1 belongs to huang1988pioneer.
+      OII_ACCOUNT_NAME: ${{ matrix.account == 1 && 'huang1988pioneer' || format('account-{0}', matrix.account) }}
       OII_STORAGE_STATE_B64: ${{ secrets[format('OII_STORAGE_STATE_B64_{0}', matrix.account)] }}
       OII_COOKIE: ${{ secrets[format('OII_COOKIE_{0}', matrix.account)] }}
       OII_MAX_RETRIES: '3'
       OII_SCREENSHOT_DIR: './screenshots'
     steps:
       - uses: actions/checkout@v4
+        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
 
       - uses: actions/setup-node@v4
+        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         with:
           node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
+        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         run: npm ci --ignore-scripts
 
       - name: Install Chromium
+        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         run: npx playwright install --with-deps chromium
 
       - name: Claim daily 盒飯
+        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         run: |
-          if [ -z "$OII_STORAGE_STATE_B64" ] && [ -z "$OII_COOKIE" ]; then
-            echo "Account $OII_ACCOUNT_NAME is not configured; skipping."
-            exit 0
-          fi
           npm run claim
 
       - name: Upload screenshots
-        if: always()
+        if: ${{ always() && (env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '') }}
         uses: actions/upload-artifact@v4
         with:
-          name: oiioii-screenshots-account-${{ matrix.account }}-${{ github.run_id }}
+          name: oiioii-screenshots-${{ matrix.account == 1 && 'huang1988pioneer' || format('account-{0}', matrix.account) }}-${{ github.run_id }}
           path: screenshots/
           retention-days: 7
           if-no-files-found: ignore

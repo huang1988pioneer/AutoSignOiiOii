@@ -45,10 +45,10 @@ base64 -w0 auth.json
 
 | Secret 名稱 | 說明 |
 | --- | --- |
-| `OII_STORAGE_STATE_B64_1`、`_2`、`_3` | 推薦。各帳號 Playwright `storageState` JSON 的 Base64 編碼 |
-| `OII_COOKIE_1`、`_2`、`_3` | 備選。各帳號完整的 `Cookie` header，例如 `session=...; other_cookie=...` |
+| `OII_STORAGE_STATE_B64_1` 至 `OII_STORAGE_STATE_B64_33` | 推薦。各帳號 Playwright `storageState` JSON 的 Base64 編碼 |
+| `OII_COOKIE_1` 至 `OII_COOKIE_33` | 備選。各帳號完整的 `Cookie` header，例如 `session=...; other_cookie=...` |
 
-Action 最多支援三個帳號。每個編號只需設定上述其中一種 Secret；未設定的帳號會自動略過。例如使用兩個帳號時，只要設定 `OII_STORAGE_STATE_B64_1` 與 `OII_STORAGE_STATE_B64_2`。
+Action 最多支援 33 個帳號。每個編號只需設定上述其中一種 Secret；未設定的帳號會自動略過。例如使用兩個帳號時，只要設定 `OII_STORAGE_STATE_B64_1` 與 `OII_STORAGE_STATE_B64_2`。
 
 > ⚠️ **安全提醒**：不要把 cookie、storage state 或帳號密碼提交到 Git。
 
@@ -109,6 +109,22 @@ npm run claim
 | `OII_ACCOUNT_NAME` | `default` | 日誌／截圖用帳號標籤 |
 | `OII_MAX_RETRIES` | `3` | 最大重試次數 |
 | `OII_SCREENSHOT_DIR` | `./screenshots` | 截圖存放路徑 |
+
+---
+
+## Avalonia 登入流程工具
+
+若不想在終端機手動執行 Playwright，可使用桌面工具建立登入狀態：
+
+```powershell
+dotnet run --project .\OiiOiiFlow\OiiOiiFlow.csproj
+```
+
+1. 在工具中選擇帳號 01–33；它會對應 `OII_STORAGE_STATE_B64_1` 至 `OII_STORAGE_STATE_B64_33`。
+2. 點擊「開始登入並建立狀態」，並在開啟的瀏覽器自行完成 OiiOii 登入。
+3. 確認進入 OiiOii 後關閉該瀏覽器。工具會將 Base64 登入狀態複製到剪貼簿，並顯示要建立的 GitHub Secret 名稱。
+
+工具不會顯示或儲存帳密；請勿把 `auth-N.json` 或剪貼簿中的 Base64 提交至 Git。
 
 ---
 

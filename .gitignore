@@ -1,4 +1,7 @@
 node_modules/
 screenshots/
 auth.json
+auth-*.json
 *.storageState.json
+bin/
+obj/

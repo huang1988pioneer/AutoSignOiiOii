@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   claim:
+    name: claim (${{ matrix.account }}) - ${{ matrix.account == 1 && 'huang1988pioneer' || matrix.account == 2 && 'abuhg17' || matrix.account == 3 && 'goldshoot0720' || format('account-{0}', matrix.account) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -20,7 +21,7 @@ jobs:
         account: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]
     env:
       # OII_STORAGE_STATE_B64_1 belongs to huang1988pioneer.
-      OII_ACCOUNT_NAME: ${{ matrix.account == 1 && 'huang1988pioneer' || format('account-{0}', matrix.account) }}
+      OII_ACCOUNT_NAME: ${{ matrix.account == 1 && 'huang1988pioneer' || matrix.account == 2 && 'abuhg17' || matrix.account == 3 && 'goldshoot0720' || format('account-{0}', matrix.account) }}
       OII_STORAGE_STATE_B64: ${{ secrets[format('OII_STORAGE_STATE_B64_{0}', matrix.account)] }}
       OII_COOKIE: ${{ secrets[format('OII_COOKIE_{0}', matrix.account)] }}
       OII_MAX_RETRIES: '3'

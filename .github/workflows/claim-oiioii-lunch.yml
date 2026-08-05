@@ -2,17 +2,45 @@ name: Claim OiiOii daily lunch
 
 on:
   schedule:
-    # OiiOii daily 盒飯 refreshes at UTC 00:00. Run shortly after.
-    # 00:10 UTC = 08:10 Asia/Taipei
-    - cron: '10 0 * * *'
+    # GitHub Actions uses UTC. These are 05:00, 13:00, and 21:00 Asia/Taipei.
+    - cron: '0 21,5,13 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  random_start:
+    name: Choose a random scheduled start time
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    outputs:
+      account_delays: ${{ steps.schedule.outputs.account_delays }}
+    steps:
+      - name: Wait for a random time within the hour
+        if: github.event_name == 'schedule'
+        shell: bash
+        run: |
+          delay_seconds=$((RANDOM % 3600))
+          echo "Scheduled run will start in $((delay_seconds / 60)) minutes and $((delay_seconds % 60)) seconds."
+          sleep "$delay_seconds"
+
+      - name: Create staggered account schedule
+        id: schedule
+        shell: bash
+        run: |
+          delays=(0)
+          total_delay=0
+          for account in $(seq 2 33); do
+            total_delay=$((total_delay + 5 + RANDOM % 11))
+            delays+=("$total_delay")
+          done
+          IFS=,
+          echo "account_delays=${delays[*]}" >> "$GITHUB_OUTPUT"
+
   claim:
     name: claim (${{ matrix.account }}) - ${{ matrix.account == 1 && 'huang1988pioneer' || matrix.account == 2 && 'abuhg17' || matrix.account == 3 && 'goldshoot0720' || format('account-{0}', matrix.account) }}
+    needs: random_start
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -27,6 +55,16 @@ jobs:
       OII_MAX_RETRIES: '3'
       OII_SCREENSHOT_DIR: './screenshots'
     steps:
+      - name: Wait for this account's turn
+        shell: bash
+        env:
+          ACCOUNT_DELAYS: ${{ needs.random_start.outputs.account_delays }}
+        run: |
+          IFS=, read -r -a delays <<< "$ACCOUNT_DELAYS"
+          delay_seconds="${delays[$(( ${{ matrix.account }} - 1 ))]}"
+          echo "Account ${{ matrix.account }} will start after ${delay_seconds} seconds."
+          sleep "$delay_seconds"
+
       - uses: actions/checkout@v4
         if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
 
@@ -53,7 +91,7 @@ jobs:
         if: ${{ always() && (env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '') }}
         uses: actions/upload-artifact@v4
         with:
-          name: oiioii-screenshots-${{ matrix.account == 1 && 'huang1988pioneer' || format('account-{0}', matrix.account) }}-${{ github.run_id }}
+          name: oiioii-screenshots-${{ matrix.account == 1 && 'huang1988pioneer' || matrix.account == 2 && 'abuhg17' || matrix.account == 3 && 'goldshoot0720' || format('account-{0}', matrix.account) }}-${{ github.run_id }}
           path: screenshots/
           retention-days: 7
           if-no-files-found: ignore

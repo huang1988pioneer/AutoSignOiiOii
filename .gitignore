@@ -5,3 +5,6 @@ auth-*.json
 *.storageState.json
 bin/
 obj/
+
+dist/
+publish/

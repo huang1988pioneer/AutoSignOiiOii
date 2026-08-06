@@ -32,32 +32,6 @@ public partial class MainWindow : Window
     private string SecretName => $"OII_STORAGE_STATE_B64_{AccountNumber}";
     private string? AccountAlias => _accountAliases.GetValueOrDefault(AccountNumber);
 
-    /// <summary>Playwright engine for login codegen: chromium (default), firefox / edge (fallback).</summary>
-    private string LoginBrowser => ReadBrowserSelection(BrowserComboBox);
-
-    /// <summary>Playwright engine when manually triggering GitHub Actions.</summary>
-    private string DashboardBrowser => ReadBrowserSelection(DashboardBrowserComboBox);
-
-    private static string ReadBrowserSelection(ComboBox? comboBox)
-    {
-        if (comboBox?.SelectedItem is ComboBoxItem { Tag: string tag } &&
-            (tag is "chromium" or "firefox" or "edge"))
-            return tag;
-        return "chromium";
-    }
-
-    /// <summary>
-    /// Map user-facing browser id to Playwright install package and codegen CLI flags.
-    /// Edge uses channel msedge (not a separate Playwright browser family).
-    /// </summary>
-    private static (string InstallTarget, string CodegenBrowserArgs, string DisplayName) ResolvePlaywrightBrowser(string browser) =>
-        browser switch
-        {
-            "firefox" => ("firefox", "--browser=firefox", "Firefox"),
-            "edge" => ("msedge", "--channel=msedge", "Edge"),
-            _ => ("chromium", "--browser=chromium", "Chromium"),
-        };
-
     private void UpdateSecretName()
     {
         SecretNameText.Text = SecretName;
@@ -81,16 +55,14 @@ public partial class MainWindow : Window
             StatusText.Text = "正在確認 Node.js 相依套件…";
             await RunProcessAsync(NodeCommandPath("npm"), "install", _workspace);
 
-            var browser = LoginBrowser;
-            var (installTarget, codegenBrowserArgs, displayName) = ResolvePlaywrightBrowser(browser);
-            StatusText.Text = $"正在確認 {displayName}…";
-            await RunProcessAsync(NodeCommandPath("npx"), $"playwright install {installTarget}", _workspace);
+            StatusText.Text = "正在確認 Chromium…";
+            await RunProcessAsync(NodeCommandPath("npx"), "playwright install chromium", _workspace);
 
             if (File.Exists(StateFile)) File.Delete(StateFile);
-            StatusText.Text = $"已開啟 {displayName}。請完成 OiiOii 登入，確認成功後關閉瀏覽器視窗。";
+            StatusText.Text = "瀏覽器已開啟。請完成 OiiOii 登入，確認成功後關閉瀏覽器視窗。";
             await RunProcessAsync(
                 NodeCommandPath("npx"),
-                $"playwright codegen {codegenBrowserArgs} --save-storage=\"auth-{AccountNumber:00}.json\" {OiiOiiUrl}",
+                $"playwright codegen --save-storage=\"auth-{AccountNumber:00}.json\" {OiiOiiUrl}",
                 _workspace);
 
             if (!File.Exists(StateFile))
@@ -124,10 +96,8 @@ public partial class MainWindow : Window
         DashboardStatusText.Text = "正在送出 GitHub Actions 手動執行請求…";
         try
         {
-            var browser = DashboardBrowser;
-            await _githubActions.TriggerClaimAsync(browser);
-            DashboardStatusText.Text =
-                $"已觸發每日領取 workflow（瀏覽器：{browser}）。啟動後按「更新執行結果」即可查看帳號進度。";
+            await _githubActions.TriggerClaimAsync();
+            DashboardStatusText.Text = "已觸發每日領取 workflow。啟動後按「更新執行結果」即可查看帳號進度。";
         }
         catch (Exception exception)
         {
@@ -183,32 +153,11 @@ public partial class MainWindow : Window
         return 20;
     }
 
-    private static Grid CreateAccountResultHeader()
-    {
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("78,140,72,*") };
-        header.Children.Add(new TextBlock { Text = "帳號", FontSize = 12, Foreground = Avalonia.Media.Brush.Parse("#52606D") });
-        var aliasHeader = new TextBlock { Text = "名稱", FontSize = 12, Foreground = Avalonia.Media.Brush.Parse("#52606D") };
-        Grid.SetColumn(aliasHeader, 1);
-        header.Children.Add(aliasHeader);
-        var streakHeader = new TextBlock { Text = "連續簽到", FontSize = 12, Foreground = Avalonia.Media.Brush.Parse("#52606D") };
-        Grid.SetColumn(streakHeader, 2);
-        header.Children.Add(streakHeader);
-        var stateHeader = new TextBlock { Text = "最近結果", FontSize = 12, Foreground = Avalonia.Media.Brush.Parse("#52606D") };
-        Grid.SetColumn(stateHeader, 3);
-        header.Children.Add(stateHeader);
-        return header;
-    }
-
     private void RenderDashboard(DashboardSnapshot snapshot)
     {
-        var streak = snapshot.Streak;
         SuccessfulAccountsMetric.Text = $"{snapshot.SuccessfulAccounts.Length} 個";
-        MaxStreakMetric.Text = streak.TrackedCount == 0 ? "—" : $"{streak.MaxDays} 天";
-        AverageStreakMetric.Text = streak.TrackedCount == 0 ? "—" : $"{streak.AverageDays:0.#} 天";
+        ConsecutiveDaysMetric.Text = $"{snapshot.ConsecutiveDays} 天";
         MonthlyPointsMetric.Text = snapshot.MonthlyClaimedPoints.ToString("0.##");
-        StreakSummaryText.Text = streak.TrackedCount == 0
-            ? "連續簽到彙總：尚無已設定帳號的簽到紀錄。"
-            : $"連續簽到彙總：追蹤 {streak.TrackedCount} 個帳號 · 進行中 {streak.ActiveStreakCount} 個 · 最長 {streak.MaxDays} 天 · 最短 {streak.MinDays} 天 · 平均 {streak.AverageDays:0.#} 天（依台北日期；同一天任一成功時段即算）。";
 
         if (snapshot.LatestRun is null)
         {
@@ -220,48 +169,29 @@ public partial class MainWindow : Window
         var runStatus = string.IsNullOrWhiteSpace(snapshot.LatestRun.Conclusion)
             ? snapshot.LatestRun.Status
             : snapshot.LatestRun.Conclusion;
-        var unconfiguredCount = snapshot.Accounts.Count(account => !account.DidAttemptClaim);
+        var unconfiguredCount = snapshot.Accounts.Count(account => !account.IsConfigured);
         DashboardStatusText.Text =
             $"最近執行：{snapshot.LatestRun.CreatedAt.LocalDateTime:g} · {runStatus} · " +
             $"成功 {snapshot.SuccessfulAccounts.Length} 個、失敗 {snapshot.FailedAccounts.Length} 個、未設定 {unconfiguredCount} 個。";
 
         ActionAccountResultsPanel.Children.Clear();
-        ActionAccountResultsPanel.Children.Add(CreateAccountResultHeader());
         foreach (var account in snapshot.Accounts)
         {
-            var hasLogin = account.DidAttemptClaim || account.IsConfigured;
-            var alias = hasLogin
+            var alias = account.IsConfigured
                 ? _accountAliases.GetValueOrDefault(account.Number) ?? account.Alias
                 : "未設定帳號";
-            var result = !account.DidAttemptClaim
+            var result = !account.IsConfigured
                 ? "尚未設定登入狀態"
                 : account.IsSuccessful
-                ? "領取成功"
-                : account.IsCompleted
-                ? "領取失敗"
-                : "尚在執行";
-            var streakLabel = !account.DidAttemptClaim && account.ConsecutiveDays == 0
-                ? "—"
-                : $"{account.ConsecutiveDays} 天";
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("78,140,72,*") };
+                ? "登入有效、領取流程成功"
+                : account.IsCompleted ? "登入或領取流程失敗" : "尚在執行或未設定";
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("78,160,*") };
             row.Children.Add(new TextBlock { Text = $"帳號 {account.Number:00}", FontWeight = Avalonia.Media.FontWeight.SemiBold });
             var aliasText = new TextBlock { Text = alias, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
             Grid.SetColumn(aliasText, 1);
             row.Children.Add(aliasText);
-            var streakText = new TextBlock
-            {
-                Text = streakLabel,
-                FontWeight = account.ConsecutiveDays > 0
-                    ? Avalonia.Media.FontWeight.SemiBold
-                    : Avalonia.Media.FontWeight.Normal,
-                Foreground = account.ConsecutiveDays > 0
-                    ? Avalonia.Media.Brush.Parse("#0F766E")
-                    : Avalonia.Media.Brush.Parse("#52606D"),
-            };
-            Grid.SetColumn(streakText, 2);
-            row.Children.Add(streakText);
-            var stateText = new TextBlock { Text = result, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
-            Grid.SetColumn(stateText, 3);
+            var stateText = new TextBlock { Text = result };
+            Grid.SetColumn(stateText, 2);
             row.Children.Add(stateText);
             ActionAccountResultsPanel.Children.Add(row);
         }

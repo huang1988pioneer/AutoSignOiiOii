@@ -5,15 +5,6 @@ on:
     # GitHub Actions uses UTC. These are 05:00, 13:00, and 21:00 Asia/Taipei.
     - cron: '0 21,5,13 * * *'
   workflow_dispatch:
-    inputs:
-      browser:
-        description: 'Playwright browser (firefox / edge are fallbacks if Chromium fails)'
-        type: choice
-        options:
-          - chromium
-          - firefox
-          - edge
-        default: chromium
 
 permissions:
   contents: read
@@ -160,25 +151,13 @@ jobs:
         account: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]
     env:
       # OII_STORAGE_STATE_B64_1 belongs to huang1988pioneer.
-      # Browser: manual run uses workflow_dispatch input; scheduled runs use repo variable OII_BROWSER (default chromium).
-      OII_BROWSER: ${{ inputs.browser || vars.OII_BROWSER || 'chromium' }}
       OII_ACCOUNT_NAME: ${{ matrix.account == 1 && 'huang1988pioneer' || matrix.account == 2 && 'abuhg17' || matrix.account == 3 && 'goldshoot0720' || format('account-{0}', matrix.account) }}
       OII_STORAGE_STATE_B64: ${{ secrets[format('OII_STORAGE_STATE_B64_{0}', matrix.account)] }}
       OII_COOKIE: ${{ secrets[format('OII_COOKIE_{0}', matrix.account)] }}
       OII_MAX_RETRIES: '3'
       OII_SCREENSHOT_DIR: './screenshots'
     steps:
-      # Unconfigured slots (no storage state / cookie secret) skip immediately — no staggered wait.
-      - name: Skip unconfigured account
-        if: ${{ env.OII_STORAGE_STATE_B64 == '' && env.OII_COOKIE == '' }}
-        shell: bash
-        run: |
-          echo "Account ${{ matrix.account }} has no OII_STORAGE_STATE_B64 / OII_COOKIE secret; skipping without wait."
-          echo "## Account ${{ matrix.account }} skipped" >> "$GITHUB_STEP_SUMMARY"
-          echo "No login state configured for this matrix slot. Job exits without staggered delay." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Wait for this account's turn
-        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         shell: bash
         env:
           ACCOUNT_DELAYS: ${{ needs.random_start.outputs.account_delays }}
@@ -201,37 +180,13 @@ jobs:
         if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         run: npm ci --ignore-scripts
 
-      - name: Install Playwright browser
+      - name: Install Chromium
         if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
-        shell: bash
-        run: |
-          browser="$(echo "${OII_BROWSER:-chromium}" | tr '[:upper:]' '[:lower:]')"
-          install_target=""
-          case "$browser" in
-            firefox)
-              install_target=firefox
-              ;;
-            edge|msedge)
-              browser=edge
-              install_target=msedge
-              ;;
-            chrome|chromium|"")
-              browser=chromium
-              install_target=chromium
-              ;;
-            *)
-              echo "::error::Unsupported OII_BROWSER='$OII_BROWSER'. Use chromium, firefox, or edge."
-              exit 1
-              ;;
-          esac
-          echo "OII_BROWSER=$browser" >> "$GITHUB_ENV"
-          echo "Installing Playwright browser: $browser (install target: $install_target)"
-          npx playwright install --with-deps "$install_target"
+        run: npx playwright install --with-deps chromium
 
       - name: Claim daily 盒飯
         if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         run: |
-          echo "Claiming with browser: $OII_BROWSER"
           npm run claim
 
       - name: Upload screenshots

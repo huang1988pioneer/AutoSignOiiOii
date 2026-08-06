@@ -5,7 +5,7 @@
 ## 功能
 
 - 每日自動執行，或從 GitHub Actions 手動執行
-- 支援 1～3 個 OiiOii 帳號
+- 支援最多 **33** 個 OiiOii 帳號（matrix 並行、依序錯開啟動）
 - 優先使用 Playwright Storage State，也可使用 Cookie Header
 - 找不到按鈕或暫時失敗時，最多重試 3 次
 - 自動上傳執行截圖為 Artifact，保留 7 天
@@ -43,8 +43,8 @@ base64 -w0 auth.json
 | --- | --- |
 | `OII_STORAGE_STATE_B64_1` | 帳號 1 的 Base64 Storage State（建議） |
 | `OII_COOKIE_1` | 帳號 1 的 Cookie Header（可替代 Storage State） |
-| `OII_STORAGE_STATE_B64_2`、`OII_COOKIE_2` | 帳號 2（選填） |
-| `OII_STORAGE_STATE_B64_3`、`OII_COOKIE_3` | 帳號 3（選填） |
+| `OII_STORAGE_STATE_B64_2` … `OII_STORAGE_STATE_B64_33` | 帳號 2～33 的 Storage State（選填） |
+| `OII_COOKIE_2` … `OII_COOKIE_33` | 帳號 2～33 的 Cookie（選填，可替代 Storage State） |
 
 每個帳號只要設定其中一種登入方式即可，且 Storage State 優先。未設定 Secret 的帳號會自動略過。
 
@@ -64,7 +64,16 @@ GitHub Actions 每天會在下列台北時間（UTC+8）各自執行一次：
 | 13:00–14:00 | 整點觸發後，隨機等待 0–59 分鐘再開始 |
 | 21:00–22:00 | 整點觸發後，隨機等待 0–59 分鐘再開始 |
 
-同一次 workflow 中，帳號 1 會先執行；每個後續帳號都會在前一個帳號後再隨機延遲 **5–15 秒**，避免 33 個帳號同時操作。GitHub 的排程本身也可能延遲，因此實際開始時間可能略晚於上述時段。
+### 33 個帳號依序錯開啟動
+
+同一次 workflow 會同時拉起最多 33 個帳號 job（matrix），但**啟動時間依序錯開**，避免全數同一秒操作：
+
+1. 帳號 1 先開始（延遲 0 秒）
+2. 帳號 2 比帳號 1 **隨機晚 5–15 秒**
+3. 帳號 3 比帳號 2 **隨機晚 5–15 秒**
+4. 依此類推，直到帳號 33
+
+因此若帳號 1 在 `T` 開始，帳號 *n* 約在 `T + Σ(5…15)` 秒後開始；前後帳號可重疊執行（不需等前一個完全跑完），但不會同時點擊。GitHub 的排程本身也可能延遲，因此實際開始時間可能略晚於上述時段。
 
 ## 在本機執行
 

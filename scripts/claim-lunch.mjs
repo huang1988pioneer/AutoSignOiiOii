@@ -16,7 +16,10 @@ const SCREENSHOT_DIR = process.env.OII_SCREENSHOT_DIR || './screenshots';
 const BROWSER_NAME = (process.env.OII_BROWSER || 'chromium').toLowerCase().trim();
 
 // Pages that often host daily 盒飯 check-in UI.
+// Screenshot (2026-08): claim control lives in the top-right account/coin drawer on /home.
 const REWARD_PATHS = [
+  '/zh-Hant/home',
+  '/home',
   '/zh-Hant/',
   '/',
   '/zh-Hant/profile',
@@ -176,13 +179,23 @@ const LOGIN_PATTERNS = [
   '立即登入',
 ];
 
-// Daily 盒飯 / check-in button text (Traditional + Simplified + English).
+// Daily 盒飯 / check-in button or row text (Traditional + Simplified + English).
+// Matches e.g. 「升級會員，每日簽到領額外盒飯」 from the account drawer.
 const CLAIM_TEXT_RE =
-  /(?:daily\s*(?:check.?in|claim|reward|bonus|sign.?in)|check.?in|sign.?in|claim\s*(?:daily|reward|bonus|bento|lunch)|立即(?:簽到|签到|領取|领取)|(?:每日|今天|今日).*(?:簽到|签到|領取|领取)|(?:簽到|签到).*(?:盒飯|盒饭|飯盒|饭盒|獎勵|奖励)?|(?:領取|领取).*(?:盒飯|盒饭|飯盒|饭盒|獎勵|奖励)|(?:盒飯|盒饭|飯盒|饭盒).*(?:簽到|签到|領取|领取)|打卡|領盒飯|领盒饭|领饭盒|領飯盒)/i;
+  /(?:daily\s*(?:check.?in|claim|reward|bonus|sign.?in)|check.?in|sign.?in|claim\s*(?:daily|reward|bonus|bento|lunch)|立即(?:簽到|签到|領取|领取)|(?:每日|每天|今天|今日).*(?:簽到|签到|領取|领取)|(?:簽到|签到).*(?:盒飯|盒饭|飯盒|饭盒|獎勵|奖励|額外|额外)?|(?:領取|领取).*(?:盒飯|盒饭|飯盒|饭盒|獎勵|奖励|額外|额外)|(?:盒飯|盒饭|飯盒|饭盒).*(?:簽到|签到|領取|领取)|打卡|領盒飯|领盒饭|领饭盒|領飯盒|領額外盒飯|领额外盒饭)/i;
 
-// Avoid paid / subscribe CTAs even if nearby text mentions 盒飯.
+// Pure paid / subscribe CTAs — do NOT use alone (see isDangerousClaimText).
+// Note: daily row copy may include「升級會員」as marketing text; that is still a free daily claim.
 const DANGEROUS_TEXT_RE =
-  /(?:訂閱|订阅|subscribe|購買|购买|buy|upgrade|升級|升级|充值|top.?up|payment|付款)/i;
+  /(?:訂閱|订阅|subscribe|購買|购买|buy|upgrade|升級|升级|充值|top.?up|payment|付款|邀請好友|邀请好友|invite)/i;
+
+// True daily-check-in intent (overrides nearby "upgrade" marketing wording).
+const DAILY_INTENT_RE =
+  /(?:每日|每天|今天|今日).*(?:簽到|签到|領取|领取)|(?:簽到|签到).*(?:盒飯|盒饭|額外|额外)|daily\s*(?:check.?in|claim|sign.?in)|check.?in|sign.?in/i;
+
+// The pink "+ 20" control next to the daily row in the account drawer.
+// Button text may be plain "+ 20" or include a coin glyph / icon spacing.
+const PLUS_REWARD_RE = /^\s*(?:[^\d\w]{0,4}\s*)?\+?\s*\d{1,4}\s*$/u;
 
 // Confirmation after clicking: success indicators.
 const SUCCESS_RE =
@@ -190,7 +203,7 @@ const SUCCESS_RE =
 
 // Already claimed: no need to click.
 const ALREADY_CLAIMED_RE =
-  /(?:already\s*(?:claimed|checked.?in|signed.?in)|已(?:領取|领取|簽到|签到)|(?:today|今[天日]).*(?:已|done|領過|领过)|明[天日].*(?:再來|再来|come\s*back)|come\s*back\s*tomorrow)/i;
+  /(?:already\s*(?:claimed|checked.?in|signed.?in)|已(?:領取|领取|簽到|签到)|(?:today|今[天日]).*(?:已|done|領過|领过)|明[天日].*(?:再來|再来|come\s*back)|come\s*back\s*tomorrow|明日再來|明天再来)/i;
 
 // ─── Core Logic ─────────────────────────────────────────────────────────────────
 
@@ -204,23 +217,148 @@ async function isLoggedOut(page) {
   return /\/(login|logon|h5-login|sign-?in)/i.test(url);
 }
 
+/**
+ * Daily check-in rows often include marketing words like「升級會員」.
+ * Allow those when the row clearly has daily sign-in intent.
+ */
+function isDangerousClaimText(text) {
+  if (!text) return true;
+  if (DAILY_INTENT_RE.test(text)) return false;
+  return DANGEROUS_TEXT_RE.test(text);
+}
+
 function claimLocators(page) {
   return page
     .locator('button:visible, [role="button"]:visible, a:visible, div[class*="btn"]:visible, span[class*="btn"]:visible')
-    .filter({ hasText: CLAIM_TEXT_RE })
-    .filter({ hasNotText: DANGEROUS_TEXT_RE });
+    .filter({ hasText: CLAIM_TEXT_RE });
+}
+
+/**
+ * Open the top-right account / 盒飯 drawer shown in the product UI.
+ * The daily +N claim control is inside this panel, not on the bare homepage.
+ */
+async function openAccountDrawer(page) {
+  // Already open if the daily row or balance breakdown is visible.
+  const alreadyOpen = page
+    .locator('body')
+    .getByText(/每日簽到|每日签到|通用盒飯|通用盒饭|專屬盒飯|专属盒饭|升級會員|升级会员/i)
+    .first();
+  if (await alreadyOpen.isVisible().catch(() => false)) {
+    log('Account drawer already visible.');
+    return true;
+  }
+
+  const openers = [
+    // Coin / balance chip in chrome: "52 BASE" (preferred — matches product screenshot).
+    page
+      .locator('button:visible, [role="button"]:visible, a:visible, div:visible, span:visible')
+      .filter({ hasText: /^\s*\d{1,6}\s*(?:BASE|盒飯|盒饭)\s*$/i }),
+    page
+      .locator('button:visible, [role="button"]:visible, a:visible')
+      .filter({ hasText: /\d{1,6}\s*(?:BASE|盒飯|盒饭)/i }),
+    // Avatar / profile area near the top right
+    page
+      .locator('[class*="avatar"]:visible, [class*="Avatar"]:visible, img[alt*="avatar" i]:visible, img[class*="avatar" i]:visible')
+      .locator('xpath=ancestor-or-self::*[self::button or @role="button" or self::a or self::div][1]'),
+    page.getByRole('button', { name: /BASE|帳戶|账户|profile|account/i }),
+  ];
+
+  for (const opener of openers) {
+    const count = await opener.count().catch(() => 0);
+    for (let i = 0; i < Math.min(count, 8); i++) {
+      const el = opener.nth(i);
+      if (!(await el.isVisible().catch(() => false))) continue;
+      const text = ((await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      // Skip pure navigation / paid CTAs and huge containers.
+      if (text.length > 40) continue;
+      if (/購買|购买|訂閱|订阅|活動|活动|通知|邀請|邀请/.test(text) && !/(?:盒飯|盒饭|BASE)/i.test(text)) continue;
+      log(`Opening account drawer via control: "${text.slice(0, 40) || '(icon)'}"…`);
+      await el.click({ timeout: 8_000 }).catch(() => {});
+      await waitForStable(page, 1200);
+      if (
+        await page
+          .getByText(/每日簽到|每日签到|通用盒飯|通用盒饭|專屬盒飯|专属盒饭|升級會員，每日|升级会员，每日/i)
+          .first()
+          .isVisible()
+          .catch(() => false)
+      ) {
+        log('Account drawer opened.');
+        return true;
+      }
+    }
+  }
+
+  warn('Could not confirm account drawer is open; will still search the page.');
+  return false;
+}
+
+/**
+ * Find the daily row and click its pink "+ N" control.
+ * UI copy (zh-Hant): 「升級會員，每日簽到領額外盒飯」 + button「+ 20」
+ */
+async function findDailyPlusButton(page) {
+  const rows = page.locator('div, li, section, article, tr').filter({ hasText: DAILY_INTENT_RE });
+  const rowCount = await rows.count().catch(() => 0);
+  for (let i = 0; i < Math.min(rowCount, 12); i++) {
+    const row = rows.nth(i);
+    if (!(await row.isVisible().catch(() => false))) continue;
+    const rowText = ((await row.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    if (!DAILY_INTENT_RE.test(rowText)) continue;
+    // Prefer compact rows (the drawer item), not the whole page shell.
+    if (rowText.length > 160) continue;
+
+    const plusBtn = row
+      .locator('button:visible, [role="button"]:visible, a:visible, div[class*="btn"]:visible, span[class*="btn"]:visible')
+      .filter({ hasText: PLUS_REWARD_RE });
+    if ((await plusBtn.count()) >= 1) {
+      log(`Found daily +N control in row: "${rowText.slice(0, 60)}"`);
+      return plusBtn.first();
+    }
+
+    // Fallback: any clickable in the row that is not pure upgrade/purchase without daily intent.
+    const anyBtn = row.locator('button:visible, [role="button"]:visible, a:visible').last();
+    if ((await anyBtn.count()) >= 1 && (await anyBtn.isVisible().catch(() => false))) {
+      const btnText = ((await anyBtn.innerText().catch(() => '')) || '').trim();
+      if (!/^(?:升級會員|升级会员|購買盒飯|购买盒饭|升級|升级)$/i.test(btnText)) {
+        log(`Found daily row action "${btnText || '(empty)'}" for: "${rowText.slice(0, 60)}"`);
+        return anyBtn;
+      }
+    }
+  }
+
+  // Global fallback: visible "+ N" near daily-sign-in text.
+  const globalPlus = page
+    .locator('button:visible, [role="button"]:visible, a:visible, div[class*="btn"]:visible')
+    .filter({ hasText: /\+\s*(?:20|50|\d{1,3})\s*$/ });
+  const plusCount = await globalPlus.count().catch(() => 0);
+  for (let i = 0; i < Math.min(plusCount, 8); i++) {
+    const btn = globalPlus.nth(i);
+    if (!(await btn.isVisible().catch(() => false))) continue;
+    const nearby = await btn.evaluate((el) => {
+      const parent = el.closest('div, li, section, article') || el.parentElement;
+      return (parent?.innerText || el.innerText || '').replace(/\s+/g, ' ').trim();
+    }).catch(() => '');
+    if (DAILY_INTENT_RE.test(nearby) || /額外盒飯|额外盒饭|簽到|签到/.test(nearby)) {
+      log(`Found global +N near daily text: "${nearby.slice(0, 60)}"`);
+      return btn;
+    }
+  }
+
+  return null;
 }
 
 async function bodyLooksClaimedOrSuccess(page) {
   const body = await page.locator('body').innerText();
-  if (SUCCESS_RE.test(body)) return 'success';
+  // Prefer "already" over generic "成功" which appears in marketing copy.
   if (ALREADY_CLAIMED_RE.test(body)) return 'already';
+  if (SUCCESS_RE.test(body)) return 'success';
   return null;
 }
 
 async function clickClaimAndConfirm(page, btn, source) {
-  log(`Found claim control on ${source}. Clicking…`);
-  await btn.first().click({ timeout: 10_000 });
+  const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+  log(`Found claim control on ${source}${label ? ` ("${label.slice(0, 40)}")` : ''}. Clicking…`);
+  await btn.click({ timeout: 10_000 });
   await waitForStable(page, 2000);
 
   // Some UIs need a second confirm ("確認" / "确定" / "OK").
@@ -245,10 +383,10 @@ async function clickClaimAndConfirm(page, btn, source) {
     return true;
   }
 
-  // Click without clear toast can still succeed; treat as soft success if button vanished.
-  const remaining = await claimLocators(page).count();
-  if (remaining === 0) {
-    log(`✅ Claim button disappeared after click (${source}); treating as success.`);
+  // Soft success: daily +N control disappeared after click.
+  const stillThere = await findDailyPlusButton(page);
+  if (!stillThere) {
+    log(`✅ Claim control disappeared after click (${source}); treating as success.`);
     await saveScreenshot(page, 'claim-button-gone');
     return true;
   }
@@ -259,26 +397,42 @@ async function clickClaimAndConfirm(page, btn, source) {
 }
 
 async function tryClaimOnPage(page, source) {
-  // Popup / modal first (common after login).
-  const dialogClaim = page
-    .locator(
-      '[class*="modal"] :is(button, [role="button"], a, div):visible, ' +
-        '[class*="dialog"] :is(button, [role="button"], a, div):visible, ' +
-        '[class*="popup"] :is(button, [role="button"], a, div):visible, ' +
-        '[class*="drawer"] :is(button, [role="button"], a, div):visible, ' +
-        '[class*="toast"] :is(button, [role="button"], a, div):visible',
-    )
-    .filter({ hasText: CLAIM_TEXT_RE })
-    .filter({ hasNotText: DANGEROUS_TEXT_RE });
-
-  if ((await dialogClaim.count()) >= 1) {
-    return clickClaimAndConfirm(page, dialogClaim, `${source} popup`);
+  // Preferred path: account drawer daily row → pink "+ N" button (current OiiOii UI).
+  await openAccountDrawer(page);
+  const plusBtn = await findDailyPlusButton(page);
+  if (plusBtn) {
+    return clickClaimAndConfirm(page, plusBtn, `${source} account-drawer`);
   }
 
+  // Popup / modal claim controls.
+  const dialogCandidates = page.locator(
+    '[class*="modal"] :is(button, [role="button"], a, div):visible, ' +
+      '[class*="dialog"] :is(button, [role="button"], a, div):visible, ' +
+      '[class*="popup"] :is(button, [role="button"], a, div):visible, ' +
+      '[class*="drawer"] :is(button, [role="button"], a, div):visible, ' +
+      '[class*="toast"] :is(button, [role="button"], a, div):visible',
+  );
+  const dialogCount = await dialogCandidates.count().catch(() => 0);
+  for (let i = 0; i < Math.min(dialogCount, 20); i++) {
+    const el = dialogCandidates.nth(i);
+    const text = ((await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    if (!CLAIM_TEXT_RE.test(text) && !DAILY_INTENT_RE.test(text) && !PLUS_REWARD_RE.test(text)) continue;
+    if (isDangerousClaimText(text) && !PLUS_REWARD_RE.test(text)) continue;
+    return clickClaimAndConfirm(page, el, `${source} popup`);
+  }
+
+  // Generic visible claim-like controls (filter dangerous marketing CTAs carefully).
   const claimButton = claimLocators(page);
   const claimCount = await claimButton.count();
+  const safeButtons = [];
+  for (let i = 0; i < Math.min(claimCount, 15); i++) {
+    const el = claimButton.nth(i);
+    const text = ((await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    if (isDangerousClaimText(text)) continue;
+    safeButtons.push(el);
+  }
 
-  if (claimCount === 0) {
+  if (safeButtons.length === 0) {
     const status = await bodyLooksClaimedOrSuccess(page);
     if (status === 'already' || status === 'success') {
       log(status === 'success' ? '✅ Daily OiiOii 盒飯 already reflected as claimed.' : '✅ Daily 盒飯 was already claimed today.');
@@ -288,10 +442,10 @@ async function tryClaimOnPage(page, source) {
     return null; // nothing here
   }
 
-  if (claimCount > 1) {
-    warn(`Found ${claimCount} possible claim controls on ${source}; clicking the first safe match.`);
+  if (safeButtons.length > 1) {
+    warn(`Found ${safeButtons.length} possible claim controls on ${source}; clicking the first safe match.`);
   }
-  return clickClaimAndConfirm(page, claimButton, source);
+  return clickClaimAndConfirm(page, safeButtons[0], source);
 }
 
 async function tryClaimOnce(browser, state, contextOptions = {}) {
@@ -305,8 +459,18 @@ async function tryClaimOnce(browser, state, contextOptions = {}) {
 
   try {
     log('Navigating to OiiOii…');
-    await page.goto(LOCALE_HOME, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    // Prefer /home — account chip + daily claim drawer live there (see product screenshot).
+    await page.goto('https://www.oiioii.ai/zh-Hant/home', {
+      waitUntil: 'domcontentloaded',
+      timeout: 60_000,
+    });
     await waitForStable(page);
+
+    if (await isLoggedOut(page)) {
+      // Fallback to locale root if /home redirects oddly while logged out check is noisy.
+      await page.goto(LOCALE_HOME, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+      await waitForStable(page);
+    }
 
     if (await isLoggedOut(page)) {
       await saveScreenshot(page, 'login-expired');
@@ -319,11 +483,11 @@ async function tryClaimOnce(browser, state, contextOptions = {}) {
 
     log('Session looks valid. Searching for daily 盒飯 claim…');
 
-    // Homepage / popup first
+    // Homepage / account drawer first
     const homeResult = await tryClaimOnPage(page, 'home');
     if (homeResult === true) return true;
 
-    // Walk likely reward pages
+    // Walk likely reward pages (skip the first few home paths we already covered).
     for (const path of REWARD_PATHS.slice(2)) {
       const url = path.startsWith('http') ? path : `https://www.oiioii.ai${path}`;
       log(`Trying ${url}…`);

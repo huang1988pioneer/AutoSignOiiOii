@@ -183,11 +183,32 @@ public partial class MainWindow : Window
         return 20;
     }
 
+    private static Grid CreateAccountResultHeader()
+    {
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("78,140,72,*") };
+        header.Children.Add(new TextBlock { Text = "帳號", FontSize = 12, Foreground = Avalonia.Media.Brush.Parse("#52606D") });
+        var aliasHeader = new TextBlock { Text = "名稱", FontSize = 12, Foreground = Avalonia.Media.Brush.Parse("#52606D") };
+        Grid.SetColumn(aliasHeader, 1);
+        header.Children.Add(aliasHeader);
+        var streakHeader = new TextBlock { Text = "連續簽到", FontSize = 12, Foreground = Avalonia.Media.Brush.Parse("#52606D") };
+        Grid.SetColumn(streakHeader, 2);
+        header.Children.Add(streakHeader);
+        var stateHeader = new TextBlock { Text = "最近結果", FontSize = 12, Foreground = Avalonia.Media.Brush.Parse("#52606D") };
+        Grid.SetColumn(stateHeader, 3);
+        header.Children.Add(stateHeader);
+        return header;
+    }
+
     private void RenderDashboard(DashboardSnapshot snapshot)
     {
+        var streak = snapshot.Streak;
         SuccessfulAccountsMetric.Text = $"{snapshot.SuccessfulAccounts.Length} 個";
-        ConsecutiveDaysMetric.Text = $"{snapshot.ConsecutiveDays} 天";
+        MaxStreakMetric.Text = streak.TrackedCount == 0 ? "—" : $"{streak.MaxDays} 天";
+        AverageStreakMetric.Text = streak.TrackedCount == 0 ? "—" : $"{streak.AverageDays:0.#} 天";
         MonthlyPointsMetric.Text = snapshot.MonthlyClaimedPoints.ToString("0.##");
+        StreakSummaryText.Text = streak.TrackedCount == 0
+            ? "連續簽到彙總：尚無已設定帳號的簽到紀錄。"
+            : $"連續簽到彙總：追蹤 {streak.TrackedCount} 個帳號 · 進行中 {streak.ActiveStreakCount} 個 · 最長 {streak.MaxDays} 天 · 最短 {streak.MinDays} 天 · 平均 {streak.AverageDays:0.#} 天（依台北日期；同一天任一成功時段即算）。";
 
         if (snapshot.LatestRun is null)
         {
@@ -199,29 +220,48 @@ public partial class MainWindow : Window
         var runStatus = string.IsNullOrWhiteSpace(snapshot.LatestRun.Conclusion)
             ? snapshot.LatestRun.Status
             : snapshot.LatestRun.Conclusion;
-        var unconfiguredCount = snapshot.Accounts.Count(account => !account.IsConfigured);
+        var unconfiguredCount = snapshot.Accounts.Count(account => !account.DidAttemptClaim);
         DashboardStatusText.Text =
             $"最近執行：{snapshot.LatestRun.CreatedAt.LocalDateTime:g} · {runStatus} · " +
             $"成功 {snapshot.SuccessfulAccounts.Length} 個、失敗 {snapshot.FailedAccounts.Length} 個、未設定 {unconfiguredCount} 個。";
 
         ActionAccountResultsPanel.Children.Clear();
+        ActionAccountResultsPanel.Children.Add(CreateAccountResultHeader());
         foreach (var account in snapshot.Accounts)
         {
-            var alias = account.IsConfigured
+            var hasLogin = account.DidAttemptClaim || account.IsConfigured;
+            var alias = hasLogin
                 ? _accountAliases.GetValueOrDefault(account.Number) ?? account.Alias
                 : "未設定帳號";
-            var result = !account.IsConfigured
+            var result = !account.DidAttemptClaim
                 ? "尚未設定登入狀態"
                 : account.IsSuccessful
-                ? "登入有效、領取流程成功"
-                : account.IsCompleted ? "登入或領取流程失敗" : "尚在執行或未設定";
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("78,160,*") };
+                ? "領取成功"
+                : account.IsCompleted
+                ? "領取失敗"
+                : "尚在執行";
+            var streakLabel = !account.DidAttemptClaim && account.ConsecutiveDays == 0
+                ? "—"
+                : $"{account.ConsecutiveDays} 天";
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("78,140,72,*") };
             row.Children.Add(new TextBlock { Text = $"帳號 {account.Number:00}", FontWeight = Avalonia.Media.FontWeight.SemiBold });
             var aliasText = new TextBlock { Text = alias, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
             Grid.SetColumn(aliasText, 1);
             row.Children.Add(aliasText);
-            var stateText = new TextBlock { Text = result };
-            Grid.SetColumn(stateText, 2);
+            var streakText = new TextBlock
+            {
+                Text = streakLabel,
+                FontWeight = account.ConsecutiveDays > 0
+                    ? Avalonia.Media.FontWeight.SemiBold
+                    : Avalonia.Media.FontWeight.Normal,
+                Foreground = account.ConsecutiveDays > 0
+                    ? Avalonia.Media.Brush.Parse("#0F766E")
+                    : Avalonia.Media.Brush.Parse("#52606D"),
+            };
+            Grid.SetColumn(streakText, 2);
+            row.Children.Add(streakText);
+            var stateText = new TextBlock { Text = result, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
+            Grid.SetColumn(stateText, 3);
             row.Children.Add(stateText);
             ActionAccountResultsPanel.Children.Add(row);
         }

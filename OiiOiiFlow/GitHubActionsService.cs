@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -29,30 +30,61 @@ internal sealed class GitHubActionsService
         var latest = runs.OrderByDescending(run => run.CreatedAt).FirstOrDefault();
 
         var timeZone = GetTaipeiTimeZone();
-        var successfulDates = runs
-            .Where(run => string.Equals(run.Conclusion, "success", StringComparison.OrdinalIgnoreCase))
-            .Select(run => TimeZoneInfo.ConvertTime(run.CreatedAt, timeZone).Date)
-            .ToHashSet();
         var today = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZone).Date;
         var monthStart = new DateTime(today.Year, today.Month, 1);
-        var monthlyRuns = runs
-            .Where(run => TimeZoneInfo.ConvertTime(run.CreatedAt, timeZone).Date >= monthStart)
+
+        // Per-account job results for listed runs (success days + monthly points).
+        var accountResultsByRun = await GetAccountResultsByRunAsync(runs.Select(run => run.DatabaseId));
+
+        var accountSuccessDates = new Dictionary<int, HashSet<DateTime>>();
+        var accountAttemptDates = new Dictionary<int, HashSet<DateTime>>();
+        foreach (var run in runs)
+        {
+            if (!accountResultsByRun.TryGetValue(run.DatabaseId, out var results)) continue;
+            var date = TimeZoneInfo.ConvertTime(run.CreatedAt, timeZone).Date;
+            foreach (var account in results)
+            {
+                if (!account.DidAttemptClaim) continue;
+
+                if (!accountAttemptDates.TryGetValue(account.Number, out var attempts))
+                {
+                    attempts = [];
+                    accountAttemptDates[account.Number] = attempts;
+                }
+                attempts.Add(date);
+
+                if (!account.IsSuccessful) continue;
+                if (!accountSuccessDates.TryGetValue(account.Number, out var dates))
+                {
+                    dates = [];
+                    accountSuccessDates[account.Number] = dates;
+                }
+                dates.Add(date);
+            }
+        }
+
+        var rawAccounts = latest is null
+            ? []
+            : accountResultsByRun.GetValueOrDefault(latest.DatabaseId) ?? [];
+        var accounts = rawAccounts
+            .Select(account => account with
+            {
+                ConsecutiveDays = CountConsecutiveDays(
+                    accountSuccessDates.GetValueOrDefault(account.Number),
+                    accountAttemptDates.GetValueOrDefault(account.Number),
+                    today),
+            })
             .ToArray();
-        var accountResultsByRun = new Dictionary<long, AccountResult[]>();
-        foreach (var run in monthlyRuns)
-            accountResultsByRun[run.DatabaseId] = await GetAccountResultsAsync(run.DatabaseId);
-        if (latest is not null && !accountResultsByRun.ContainsKey(latest.DatabaseId))
-            accountResultsByRun[latest.DatabaseId] = await GetAccountResultsAsync(latest.DatabaseId);
-        var accounts = latest is null ? [] : accountResultsByRun[latest.DatabaseId];
 
-        var consecutiveDays = 0;
-        while (successfulDates.Contains(today.AddDays(-consecutiveDays))) consecutiveDays++;
+        var successful = accounts.Where(account => account.DidAttemptClaim && account.IsSuccessful).ToArray();
+        var failed = accounts.Where(account => account.DidAttemptClaim && account.IsCompleted && !account.IsSuccessful).ToArray();
+        var streakSummary = BuildStreakSummary(accounts);
 
-        var successful = accounts.Where(account => account.IsConfigured && account.IsSuccessful).ToArray();
-        var failed = accounts.Where(account => account.IsConfigured && account.IsCompleted && !account.IsSuccessful).ToArray();
-        var monthlySuccessfulClaims = monthlyRuns
-            .SelectMany(run => accountResultsByRun[run.DatabaseId]
-                .Where(account => account.IsConfigured && account.IsSuccessful)
+        // One successful claim per account per Taipei day counts once for monthly points.
+        var monthlySuccessfulClaims = runs
+            .Where(run => TimeZoneInfo.ConvertTime(run.CreatedAt, timeZone).Date >= monthStart)
+            .SelectMany(run => (accountResultsByRun.GetValueOrDefault(run.DatabaseId) ?? [])
+                .Where(account => account.DidAttemptClaim && account.IsSuccessful)
                 .Select(account => (Date: TimeZoneInfo.ConvertTime(run.CreatedAt, timeZone).Date, account.Number)))
             .Distinct()
             .Count();
@@ -63,9 +95,77 @@ internal sealed class GitHubActionsService
             accounts,
             successful,
             failed,
-            consecutiveDays,
+            streakSummary,
             pointsPerClaim,
             monthlyClaimedPoints);
+    }
+
+    /// <summary>
+    /// Aggregate consecutive-check-in stats across accounts that have attempted claims
+    /// or already hold a positive streak from history.
+    /// </summary>
+    private static StreakSummary BuildStreakSummary(AccountResult[] accounts)
+    {
+        var tracked = accounts
+            .Where(account => account.DidAttemptClaim || account.ConsecutiveDays > 0 || account.IsConfigured)
+            .ToArray();
+        if (tracked.Length == 0)
+            return new StreakSummary(0, 0, 0, 0, 0);
+
+        var streaks = tracked.Select(account => account.ConsecutiveDays).ToArray();
+        return new StreakSummary(
+            TrackedCount: tracked.Length,
+            ActiveStreakCount: streaks.Count(days => days > 0),
+            MaxDays: streaks.Max(),
+            MinDays: streaks.Min(),
+            AverageDays: Math.Round(streaks.Average(), 1));
+    }
+
+    /// <summary>
+    /// Consecutive Taipei calendar days with a successful claim for one account.
+    /// - Success today → streak ends at today.
+    /// - Attempted but failed today → streak resets to 0.
+    /// - No attempt today yet → streak may still continue from yesterday.
+    /// </summary>
+    private static int CountConsecutiveDays(
+        HashSet<DateTime>? successDates,
+        HashSet<DateTime>? attemptDates,
+        DateTime today)
+    {
+        if (successDates is null || successDates.Count == 0) return 0;
+
+        DateTime cursor;
+        if (successDates.Contains(today))
+        {
+            cursor = today;
+        }
+        else if (attemptDates is not null && attemptDates.Contains(today))
+        {
+            // Claimed (or tried) today but no success → broken streak.
+            return 0;
+        }
+        else
+        {
+            cursor = today.AddDays(-1);
+            if (!successDates.Contains(cursor)) return 0;
+        }
+
+        var days = 0;
+        while (successDates.Contains(cursor.AddDays(-days))) days++;
+        return days;
+    }
+
+    private async Task<Dictionary<long, AccountResult[]>> GetAccountResultsByRunAsync(IEnumerable<long> runIds)
+    {
+        var ids = runIds.Distinct().ToArray();
+        if (ids.Length == 0) return [];
+
+        var results = new ConcurrentDictionary<long, AccountResult[]>();
+        await Parallel.ForEachAsync(
+            ids,
+            new ParallelOptions { MaxDegreeOfParallelism = 6 },
+            async (runId, _) => results[runId] = await GetAccountResultsAsync(runId));
+        return results.ToDictionary(pair => pair.Key, pair => pair.Value);
     }
 
     private async Task<AccountResult[]> GetAccountResultsAsync(long runId)
@@ -85,10 +185,36 @@ internal sealed class GitHubActionsService
             var alias = match.Groups["name"].Value;
             var status = GetString(job, "status");
             var conclusion = GetString(job, "conclusion");
-            results.Add(new AccountResult(number, alias, status, conclusion));
+            var claimStepConclusion = ReadClaimStepConclusion(job);
+            results.Add(new AccountResult(number, alias, status, conclusion, claimStepConclusion));
         }
 
         return results.OrderBy(result => result.Number).ToArray();
+    }
+
+    /// <summary>
+    /// Prefer the "Claim daily …" step: skipped = no secret; success/failure = real attempt.
+    /// Falls back to job conclusion when steps are missing (older API payloads).
+    /// </summary>
+    private static string? ReadClaimStepConclusion(JsonElement job)
+    {
+        if (!job.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+            return null;
+
+        foreach (var step in steps.EnumerateArray())
+        {
+            var stepName = GetString(step, "name");
+            if (stepName.Length == 0) continue;
+            // Step title is "Claim daily 盒飯" (encoding may vary in terminals).
+            if (stepName.StartsWith("Claim daily", StringComparison.OrdinalIgnoreCase) ||
+                stepName.Contains("Claim daily", StringComparison.OrdinalIgnoreCase))
+            {
+                var stepConclusion = GetString(step, "conclusion");
+                return string.IsNullOrEmpty(stepConclusion) ? null : stepConclusion;
+            }
+        }
+
+        return null;
     }
 
     private static async Task<string> RunGhAsync(params string[] arguments)
@@ -136,18 +262,51 @@ internal sealed class GitHubActionsService
 
 internal sealed record WorkflowRun(long DatabaseId, DateTimeOffset CreatedAt, string Conclusion, string Status, string Url, string Event);
 
-internal sealed record AccountResult(int Number, string Alias, string Status, string Conclusion)
+/// <param name="ClaimStepConclusion">
+/// Conclusion of the claim step: success / failure / skipped / null (in progress or unknown).
+/// </param>
+internal sealed record AccountResult(
+    int Number,
+    string Alias,
+    string Status,
+    string Conclusion,
+    string? ClaimStepConclusion = null,
+    int ConsecutiveDays = 0)
 {
-    public bool IsConfigured => !Regex.IsMatch(Alias, "^account-\\d+$", RegexOptions.IgnoreCase);
-    public bool IsSuccessful => string.Equals(Conclusion, "success", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Secret was present and the claim step actually ran (not skipped).</summary>
+    public bool DidAttemptClaim =>
+        ClaimStepConclusion is not null
+            ? !string.Equals(ClaimStepConclusion, "skipped", StringComparison.OrdinalIgnoreCase)
+            // Fallback when step list is missing: non-default job aliases are treated as configured.
+            : !Regex.IsMatch(Alias, @"^account-\d+$", RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Configured for display: real claim attempt, or non-default alias when steps are unavailable.
+    /// Unconfigured matrix slots skip checkout/claim and only sleep.
+    /// </summary>
+    public bool IsConfigured => DidAttemptClaim;
+
+    public bool IsSuccessful =>
+        ClaimStepConclusion is not null
+            ? string.Equals(ClaimStepConclusion, "success", StringComparison.OrdinalIgnoreCase)
+            : DidAttemptClaim && string.Equals(Conclusion, "success", StringComparison.OrdinalIgnoreCase);
+
     public bool IsCompleted => string.Equals(Status, "completed", StringComparison.OrdinalIgnoreCase);
 }
+
+/// <summary>Aggregate consecutive-check-in stats across tracked accounts.</summary>
+internal sealed record StreakSummary(
+    int TrackedCount,
+    int ActiveStreakCount,
+    int MaxDays,
+    int MinDays,
+    double AverageDays);
 
 internal sealed record DashboardSnapshot(
     WorkflowRun? LatestRun,
     AccountResult[] Accounts,
     AccountResult[] SuccessfulAccounts,
     AccountResult[] FailedAccounts,
-    int ConsecutiveDays,
+    StreakSummary Streak,
     decimal PointsPerClaim,
     decimal MonthlyClaimedPoints);

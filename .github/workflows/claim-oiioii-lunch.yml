@@ -168,7 +168,17 @@ jobs:
       OII_MAX_RETRIES: '3'
       OII_SCREENSHOT_DIR: './screenshots'
     steps:
+      # Unconfigured slots (no storage state / cookie secret) skip immediately — no staggered wait.
+      - name: Skip unconfigured account
+        if: ${{ env.OII_STORAGE_STATE_B64 == '' && env.OII_COOKIE == '' }}
+        shell: bash
+        run: |
+          echo "Account ${{ matrix.account }} has no OII_STORAGE_STATE_B64 / OII_COOKIE secret; skipping without wait."
+          echo "## Account ${{ matrix.account }} skipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "No login state configured for this matrix slot. Job exits without staggered delay." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Wait for this account's turn
+        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         shell: bash
         env:
           ACCOUNT_DELAYS: ${{ needs.random_start.outputs.account_delays }}

@@ -160,7 +160,7 @@ dotnet run --project OiiOiiFlow/OiiOiiFlow.csproj
 ## 疑難排解
 
 - **登入狀態過期**：重新取得 Storage State 或 Cookie，並更新對應的 GitHub Secret。
-- **找不到每日領取按鈕**：到 workflow 的 Artifact 查看截圖。目前 UI 是右上角開啟帳戶／盒飯選單後，點「每日簽到領額外盒飯」旁的 **+20**（文案可能含「升級會員」，腳本會依「每日簽到」意圖辨識，不會誤點購買／訂閱）。若 OiiOii 改版，可能需要再調整 `scripts/claim-lunch.mjs`。
+- **找不到每日領取按鈕**：到 workflow 的 Artifact 查看截圖。目前 UI 是右上角開啟帳戶／盒飯選單後，點「每日簽到領額外盒飯」旁的 **+20**（文案可能含「升級會員」，腳本會依「每日簽到」意圖辨識，不會誤點購買／訂閱）。**已領取**時同一位置會變成 **「明天見！」**，腳本會視為今日已成功。若 OiiOii 改版，可能需要再調整 `scripts/claim-lunch.mjs`。
 - **Chromium 無法領取或被擋**：改用 Firefox 或 Edge 備案——本機設 `OII_BROWSER=firefox` 或 `edge`、手動 workflow 選對應選項，或設定 Repository Variable `OII_BROWSER`；並以**同一瀏覽器**重新建立 Storage State。
 - **排程沒有準時執行**：GitHub Actions 的排程可能延遲，尤其在整點附近；可先手動執行驗證設定。
 - **需要 OTP、Google 登入或 CAPTCHA**：先在本機正常完成登入，再更新 Storage State／Cookie；此專案不會自動繞過驗證。

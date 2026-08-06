@@ -202,8 +202,12 @@ const SUCCESS_RE =
   /(?:success|claimed|received|已(?:領取|领取|簽到|签到)|簽到成功|签到成功|成功|(?:reward|bonus|bento|lunch)\s*(?:claimed|received)|獲得|获得|恭喜|congratulat|\+?\s*\d+\s*(?:盒飯|盒饭|飯盒|饭盒|點|点))/i;
 
 // Already claimed: no need to click.
+// Product UI (post-claim): purple disabled chip「明天見！」in the account drawer (replaces +20).
 const ALREADY_CLAIMED_RE =
-  /(?:already\s*(?:claimed|checked.?in|signed.?in)|已(?:領取|领取|簽到|签到)|(?:today|今[天日]).*(?:已|done|領過|领过)|明[天日].*(?:再來|再来|come\s*back)|come\s*back\s*tomorrow|明日再來|明天再来)/i;
+  /(?:already\s*(?:claimed|checked.?in|signed.?in)|已(?:領取|领取|簽到|签到)|(?:today|今[天日]).*(?:已|done|領過|领过)|明[天日].*(?:再來|再来|見|见|come\s*back)|come\s*back\s*tomorrow|see\s*you\s*tomorrow|明日再來|明天再来|明天見|明天见)/i;
+
+// Explicit post-claim control label in the coin drawer.
+const SEE_YOU_TOMORROW_RE = /^\s*明天見\s*！?\s*$|^\s*明天见\s*！?\s*$|^\s*see\s*you\s*tomorrow\s*!?\s*$/i;
 
 // ─── Core Logic ─────────────────────────────────────────────────────────────────
 
@@ -244,12 +248,14 @@ function creditClaimButtons(page) {
 }
 
 async function isAccountDrawerOpen(page) {
-  // Prefer the real claim control or compact balance breakdown over loose page text.
+  // Prefer the real claim / post-claim control or compact balance breakdown.
   if ((await creditClaimButtons(page).count().catch(() => 0)) >= 1) {
     const btn = creditClaimButtons(page).first();
     if (await btn.isVisible().catch(() => false)) return true;
   }
-  const markers = page.getByText(/通用盒飯\s*[:：]|通用盒饭\s*[:：]|專屬盒飯\s*[:：]|专属盒饭\s*[:：]|每日簽到領額外|每日签到领额外/i);
+  const markers = page.getByText(
+    /通用盒飯\s*[:：]|通用盒饭\s*[:：]|專屬盒飯\s*[:：]|专属盒饭\s*[:：]|每日簽到領額外|每日签到领额外|明天見\s*！?|明天见\s*！?/i,
+  );
   return markers.first().isVisible().catch(() => false);
 }
 
@@ -362,9 +368,49 @@ async function openAccountDrawer(page) {
 }
 
 /**
- * Find the daily "+ N" claim control.
+ * True when the account drawer shows the post-claim chip「明天見！」instead of +N.
+ */
+async function isAlreadyClaimedUi(page) {
+  const chips = page.locator(
+    'button:visible, [role="button"]:visible, div:visible, span:visible, a:visible',
+  );
+  const count = await chips.count().catch(() => 0);
+  for (let i = 0; i < Math.min(count, 40); i++) {
+    const el = chips.nth(i);
+    const text = ((await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 24) continue;
+    if (SEE_YOU_TOMORROW_RE.test(text) || /^明天見|明天见/.test(text)) {
+      log(`Detected already-claimed control: "${text}".`);
+      return true;
+    }
+  }
+
+  // credit-claim-btn may remain in DOM after claim but with 明天見 label / disabled.
+  const byClass = creditClaimButtons(page);
+  const classCount = await byClass.count().catch(() => 0);
+  for (let i = 0; i < Math.min(classCount, 5); i++) {
+    const btn = byClass.nth(i);
+    if (!(await btn.isVisible().catch(() => false))) continue;
+    const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    if (SEE_YOU_TOMORROW_RE.test(label) || /明天見|明天见|tomorrow/i.test(label)) {
+      log(`Detected already-claimed credit-claim-btn: "${label}".`);
+      return true;
+    }
+    const disabled = await btn.isDisabled().catch(() => false);
+    if (disabled && !PLUS_REWARD_RE.test(label)) {
+      log(`Detected disabled claim control ("${label || 'empty'}"); treating as already claimed.`);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Find the daily "+ N" claim control (claimable only).
  * Preferred: CSS-module class `credit-claim-btn` observed in CI.
  * Fallback: row with 每日簽到 + pink +N button.
+ * Returns null when the UI already shows「明天見！」.
  */
 async function findDailyPlusButton(page) {
   const byClass = creditClaimButtons(page);
@@ -373,6 +419,21 @@ async function findDailyPlusButton(page) {
     const btn = byClass.nth(i);
     if (!(await btn.isVisible().catch(() => false))) continue;
     const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    // Post-claim: same class may show「明天見！」— not a claim target.
+    if (SEE_YOU_TOMORROW_RE.test(label) || /明天見|明天见|tomorrow/i.test(label)) {
+      log(`credit-claim-btn is post-claim state ("${label}"); not clickable.`);
+      continue;
+    }
+    const disabled = await btn.isDisabled().catch(() => false);
+    if (disabled) {
+      log(`credit-claim-btn is disabled ("${label || 'empty'}"); skipping.`);
+      continue;
+    }
+    // Prefer buttons that still look like +N rewards.
+    if (label && !PLUS_REWARD_RE.test(label) && !/\+/.test(label) && !/領|领|簽|签|claim/i.test(label)) {
+      log(`Skipping credit-claim-btn with unexpected label: "${label}".`);
+      continue;
+    }
     log(`Found credit-claim-btn control${label ? ` ("${label.slice(0, 40)}")` : ''}.`);
     return btn;
   }
@@ -386,6 +447,7 @@ async function findDailyPlusButton(page) {
     if (!DAILY_INTENT_RE.test(rowText)) continue;
     // Prefer compact rows (the drawer item), not the whole page shell.
     if (rowText.length > 120) continue;
+    if (/明天見|明天见/.test(rowText)) continue;
 
     const plusBtn = row
       .locator('button:visible, [role="button"]:visible, a:visible, div[class*="btn"]:visible, span[class*="btn"]:visible')
@@ -394,19 +456,9 @@ async function findDailyPlusButton(page) {
       log(`Found daily +N control in row: "${rowText.slice(0, 60)}"`);
       return plusBtn.first();
     }
-
-    // Fallback: any clickable in the row that is not pure upgrade/purchase without daily intent.
-    const anyBtn = row.locator('button:visible, [role="button"]:visible, a:visible').last();
-    if ((await anyBtn.count()) >= 1 && (await anyBtn.isVisible().catch(() => false))) {
-      const btnText = ((await anyBtn.innerText().catch(() => '')) || '').trim();
-      if (!/^(?:升級會員|升级会员|購買盒飯|购买盒饭|升級|升级)$/i.test(btnText)) {
-        log(`Found daily row action "${btnText || '(empty)'}" for: "${rowText.slice(0, 60)}"`);
-        return anyBtn;
-      }
-    }
   }
 
-  // Global fallback: visible "+ N" near daily-sign-in text.
+  // Global fallback: visible "+ N" near daily-sign-in text (not 明天見).
   const globalPlus = page
     .locator('button:visible, [role="button"]:visible, a:visible, div[class*="btn"]:visible')
     .filter({ hasText: /\+\s*(?:20|50|\d{1,3})\s*$/ });
@@ -414,6 +466,7 @@ async function findDailyPlusButton(page) {
   for (let i = 0; i < Math.min(plusCount, 8); i++) {
     const btn = globalPlus.nth(i);
     if (!(await btn.isVisible().catch(() => false))) continue;
+    if (await btn.isDisabled().catch(() => false)) continue;
     const className = (await btn.getAttribute('class').catch(() => '')) || '';
     if (/credit-claim/i.test(className)) {
       log('Found global +N with credit-claim class.');
@@ -433,6 +486,8 @@ async function findDailyPlusButton(page) {
 }
 
 async function bodyLooksClaimedOrSuccess(page) {
+  // Drawer chip is more reliable than scanning the whole body for generic words.
+  if (await isAlreadyClaimedUi(page)) return 'already';
   const body = await page.locator('body').innerText();
   // Prefer "already" over generic "成功" which appears in marketing copy.
   if (ALREADY_CLAIMED_RE.test(body)) return 'already';
@@ -441,18 +496,25 @@ async function bodyLooksClaimedOrSuccess(page) {
 }
 
 async function claimButtonStillPresent(page) {
+  if (await isAlreadyClaimedUi(page)) return false;
   const btn = await findDailyPlusButton(page);
   if (!btn) return false;
   // After a successful claim the pink +N often disables, renames, or vanishes.
   const disabled = await btn.isDisabled().catch(() => false);
   if (disabled) return false;
   const text = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-  if (/已領|已领|已簽|已签|claimed|done|完成/i.test(text)) return false;
+  if (/已領|已领|已簽|已签|claimed|done|完成|明天見|明天见/i.test(text)) return false;
   return true;
 }
 
 async function clickClaimAndConfirm(page, btn, source) {
   const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+  // Safety: never click the post-claim「明天見！」chip.
+  if (SEE_YOU_TOMORROW_RE.test(label) || /明天見|明天见/.test(label)) {
+    log(`✅ Daily 盒飯 already claimed (${source}: "${label}").`);
+    await saveScreenshot(page, 'already-claimed');
+    return true;
+  }
   log(`Found claim control on ${source}${label ? ` ("${label.slice(0, 40)}")` : ''}. Clicking…`);
   try {
     await robustClick(page, btn, `claim (${source})`);
@@ -486,9 +548,9 @@ async function clickClaimAndConfirm(page, btn, source) {
     return true;
   }
 
-  // Soft success: daily +N control disappeared / disabled after click.
+  // Soft success: daily +N control disappeared / disabled after click / became 明天見.
   if (!(await claimButtonStillPresent(page))) {
-    log(`✅ Claim control gone or disabled after click (${source}); treating as success.`);
+    log(`✅ Claim control gone, disabled, or 明天見 after click (${source}); treating as success.`);
     await saveScreenshot(page, 'claim-button-gone');
     return true;
   }
@@ -501,6 +563,14 @@ async function clickClaimAndConfirm(page, btn, source) {
 async function tryClaimOnPage(page, source) {
   // Preferred path: account drawer → credit-claim-btn / pink "+ N" (current OiiOii UI).
   await openAccountDrawer(page);
+
+  // Already claimed today: purple chip「明天見！」replaces +20 (see product screenshot).
+  if (await isAlreadyClaimedUi(page)) {
+    log(`✅ Daily 盒飯 already claimed today (${source}: 明天見 UI).`);
+    await saveScreenshot(page, 'already-claimed');
+    return true;
+  }
+
   const plusBtn = await findDailyPlusButton(page);
   if (plusBtn) {
     return clickClaimAndConfirm(page, plusBtn, `${source} account-drawer`);

@@ -234,16 +234,91 @@ function claimLocators(page) {
 }
 
 /**
+ * Site CSS modules expose the daily claim control as e.g. `_credit-claim-btn_1dzjy_205`.
+ * Prefer this over fragile text/DOM ancestry matching.
+ */
+function creditClaimButtons(page) {
+  return page.locator(
+    'button[class*="credit-claim-btn"], [class*="credit-claim-btn"][role="button"], a[class*="credit-claim-btn"]',
+  );
+}
+
+async function isAccountDrawerOpen(page) {
+  // Prefer the real claim control or compact balance breakdown over loose page text.
+  if ((await creditClaimButtons(page).count().catch(() => 0)) >= 1) {
+    const btn = creditClaimButtons(page).first();
+    if (await btn.isVisible().catch(() => false)) return true;
+  }
+  const markers = page.getByText(/通用盒飯\s*[:：]|通用盒饭\s*[:：]|專屬盒飯\s*[:：]|专属盒饭\s*[:：]|每日簽到領額外|每日签到领额外/i);
+  return markers.first().isVisible().catch(() => false);
+}
+
+/**
+ * CI failure: `_overlay_*` intercepts pointer events over the claim button.
+ * Disable pointer-events on full-screen / backdrop overlays without closing the drawer
+ * (do not click the overlay — that dismisses the account panel).
+ */
+async function neutralizePointerBlockingOverlays(page) {
+  const disabled = await page.evaluate(() => {
+    let count = 0;
+    for (const el of document.querySelectorAll('div[class*="overlay"], div[class*="Overlay"], div[class*="mask"], div[class*="backdrop"]')) {
+      const style = window.getComputedStyle(el);
+      if (style.pointerEvents === 'none' || style.display === 'none' || style.visibility === 'hidden') continue;
+      // Only touch large/fixed layers that typically sit above content.
+      const rect = el.getBoundingClientRect();
+      const coversViewport =
+        rect.width >= window.innerWidth * 0.5 && rect.height >= window.innerHeight * 0.5;
+      const looksLikeModuleOverlay = /overlay|mask|backdrop/i.test(el.className || '');
+      if (!coversViewport && !looksLikeModuleOverlay) continue;
+      // Never disable the claim button itself or its ancestors with claim-btn class.
+      if (/credit-claim/i.test(el.className || '')) continue;
+      el.style.setProperty('pointer-events', 'none', 'important');
+      count += 1;
+    }
+    return count;
+  });
+  if (disabled > 0) log(`Neutralized pointer-events on ${disabled} overlay layer(s).`);
+  return disabled;
+}
+
+/**
+ * Robust click: normal → force → DOM click. Overlays often block Playwright actionability.
+ */
+async function robustClick(page, locator, label) {
+  await locator.scrollIntoViewIfNeeded().catch(() => {});
+  await neutralizePointerBlockingOverlays(page);
+
+  try {
+    await locator.click({ timeout: 5_000 });
+    log(`Clicked ${label} (normal).`);
+    return;
+  } catch (err) {
+    warn(`Normal click failed on ${label}: ${err.message.split('\n')[0]}`);
+  }
+
+  await neutralizePointerBlockingOverlays(page);
+  try {
+    await locator.click({ timeout: 5_000, force: true });
+    log(`Clicked ${label} (force).`);
+    return;
+  } catch (err) {
+    warn(`Force click failed on ${label}: ${err.message.split('\n')[0]}`);
+  }
+
+  // Last resort: native DOM click (bypasses hit-testing).
+  await locator.evaluate((el) => {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    if (typeof el.click === 'function') el.click();
+  });
+  log(`Clicked ${label} (DOM dispatch).`);
+}
+
+/**
  * Open the top-right account / 盒飯 drawer shown in the product UI.
  * The daily +N claim control is inside this panel, not on the bare homepage.
  */
 async function openAccountDrawer(page) {
-  // Already open if the daily row or balance breakdown is visible.
-  const alreadyOpen = page
-    .locator('body')
-    .getByText(/每日簽到|每日签到|通用盒飯|通用盒饭|專屬盒飯|专属盒饭|升級會員|升级会员/i)
-    .first();
-  if (await alreadyOpen.isVisible().catch(() => false)) {
+  if (await isAccountDrawerOpen(page)) {
     log('Account drawer already visible.');
     return true;
   }
@@ -273,15 +348,9 @@ async function openAccountDrawer(page) {
       if (text.length > 40) continue;
       if (/購買|购买|訂閱|订阅|活動|活动|通知|邀請|邀请/.test(text) && !/(?:盒飯|盒饭|BASE)/i.test(text)) continue;
       log(`Opening account drawer via control: "${text.slice(0, 40) || '(icon)'}"…`);
-      await el.click({ timeout: 8_000 }).catch(() => {});
+      await robustClick(page, el, `drawer-opener "${text.slice(0, 24) || 'icon'}"`).catch(() => {});
       await waitForStable(page, 1200);
-      if (
-        await page
-          .getByText(/每日簽到|每日签到|通用盒飯|通用盒饭|專屬盒飯|专属盒饭|升級會員，每日|升级会员，每日/i)
-          .first()
-          .isVisible()
-          .catch(() => false)
-      ) {
+      if (await isAccountDrawerOpen(page)) {
         log('Account drawer opened.');
         return true;
       }
@@ -293,10 +362,21 @@ async function openAccountDrawer(page) {
 }
 
 /**
- * Find the daily row and click its pink "+ N" control.
- * UI copy (zh-Hant): 「升級會員，每日簽到領額外盒飯」 + button「+ 20」
+ * Find the daily "+ N" claim control.
+ * Preferred: CSS-module class `credit-claim-btn` observed in CI.
+ * Fallback: row with 每日簽到 + pink +N button.
  */
 async function findDailyPlusButton(page) {
+  const byClass = creditClaimButtons(page);
+  const classCount = await byClass.count().catch(() => 0);
+  for (let i = 0; i < Math.min(classCount, 5); i++) {
+    const btn = byClass.nth(i);
+    if (!(await btn.isVisible().catch(() => false))) continue;
+    const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    log(`Found credit-claim-btn control${label ? ` ("${label.slice(0, 40)}")` : ''}.`);
+    return btn;
+  }
+
   const rows = page.locator('div, li, section, article, tr').filter({ hasText: DAILY_INTENT_RE });
   const rowCount = await rows.count().catch(() => 0);
   for (let i = 0; i < Math.min(rowCount, 12); i++) {
@@ -305,7 +385,7 @@ async function findDailyPlusButton(page) {
     const rowText = ((await row.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
     if (!DAILY_INTENT_RE.test(rowText)) continue;
     // Prefer compact rows (the drawer item), not the whole page shell.
-    if (rowText.length > 160) continue;
+    if (rowText.length > 120) continue;
 
     const plusBtn = row
       .locator('button:visible, [role="button"]:visible, a:visible, div[class*="btn"]:visible, span[class*="btn"]:visible')
@@ -334,6 +414,11 @@ async function findDailyPlusButton(page) {
   for (let i = 0; i < Math.min(plusCount, 8); i++) {
     const btn = globalPlus.nth(i);
     if (!(await btn.isVisible().catch(() => false))) continue;
+    const className = (await btn.getAttribute('class').catch(() => '')) || '';
+    if (/credit-claim/i.test(className)) {
+      log('Found global +N with credit-claim class.');
+      return btn;
+    }
     const nearby = await btn.evaluate((el) => {
       const parent = el.closest('div, li, section, article') || el.parentElement;
       return (parent?.innerText || el.innerText || '').replace(/\s+/g, ' ').trim();
@@ -355,10 +440,26 @@ async function bodyLooksClaimedOrSuccess(page) {
   return null;
 }
 
+async function claimButtonStillPresent(page) {
+  const btn = await findDailyPlusButton(page);
+  if (!btn) return false;
+  // After a successful claim the pink +N often disables, renames, or vanishes.
+  const disabled = await btn.isDisabled().catch(() => false);
+  if (disabled) return false;
+  const text = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+  if (/已領|已领|已簽|已签|claimed|done|完成/i.test(text)) return false;
+  return true;
+}
+
 async function clickClaimAndConfirm(page, btn, source) {
   const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
   log(`Found claim control on ${source}${label ? ` ("${label.slice(0, 40)}")` : ''}. Clicking…`);
-  await btn.click({ timeout: 10_000 });
+  try {
+    await robustClick(page, btn, `claim (${source})`);
+  } catch (err) {
+    await saveScreenshot(page, 'claim-click-failed');
+    throw err;
+  }
   await waitForStable(page, 2000);
 
   // Some UIs need a second confirm ("確認" / "确定" / "OK").
@@ -367,7 +468,9 @@ async function clickClaimAndConfirm(page, btn, source) {
     .filter({ hasText: /^(?:確認|确定|確認領取|确定领取|OK|Confirm|Got it|知道了|好的)$/i });
   if ((await confirm.count()) === 1) {
     log('Clicking confirmation dialog…');
-    await confirm.click();
+    await robustClick(page, confirm.first(), 'confirm dialog').catch(async () => {
+      await confirm.first().click({ force: true }).catch(() => {});
+    });
     await waitForStable(page, 1500);
   }
 
@@ -383,10 +486,9 @@ async function clickClaimAndConfirm(page, btn, source) {
     return true;
   }
 
-  // Soft success: daily +N control disappeared after click.
-  const stillThere = await findDailyPlusButton(page);
-  if (!stillThere) {
-    log(`✅ Claim control disappeared after click (${source}); treating as success.`);
+  // Soft success: daily +N control disappeared / disabled after click.
+  if (!(await claimButtonStillPresent(page))) {
+    log(`✅ Claim control gone or disabled after click (${source}); treating as success.`);
     await saveScreenshot(page, 'claim-button-gone');
     return true;
   }
@@ -397,7 +499,7 @@ async function clickClaimAndConfirm(page, btn, source) {
 }
 
 async function tryClaimOnPage(page, source) {
-  // Preferred path: account drawer daily row → pink "+ N" button (current OiiOii UI).
+  // Preferred path: account drawer → credit-claim-btn / pink "+ N" (current OiiOii UI).
   await openAccountDrawer(page);
   const plusBtn = await findDailyPlusButton(page);
   if (plusBtn) {
@@ -416,6 +518,10 @@ async function tryClaimOnPage(page, source) {
   for (let i = 0; i < Math.min(dialogCount, 20); i++) {
     const el = dialogCandidates.nth(i);
     const text = ((await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    const className = (await el.getAttribute('class').catch(() => '')) || '';
+    if (/credit-claim/i.test(className)) {
+      return clickClaimAndConfirm(page, el, `${source} popup-class`);
+    }
     if (!CLAIM_TEXT_RE.test(text) && !DAILY_INTENT_RE.test(text) && !PLUS_REWARD_RE.test(text)) continue;
     if (isDangerousClaimText(text) && !PLUS_REWARD_RE.test(text)) continue;
     return clickClaimAndConfirm(page, el, `${source} popup`);
@@ -545,8 +651,9 @@ async function main() {
     }
 
     fail(
-      'No daily 盒飯 claim control was found after all retries. ' +
-        'The site UI may have changed; update selectors in scripts/claim-lunch.mjs. ' +
+      'Daily 盒飯 claim did not succeed after all retries. ' +
+        'Either the claim control was missing, clicks were blocked (e.g. overlay), or confirmation was not detected. ' +
+        'Update selectors/click handling in scripts/claim-lunch.mjs if the site UI changed. ' +
         (browserName === 'chromium'
           ? 'If Chromium is blocked, retry with OII_BROWSER=firefox or OII_BROWSER=edge. '
           : '') +

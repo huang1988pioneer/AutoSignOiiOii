@@ -157,10 +157,11 @@ async function saveScreenshot(page, label) {
 }
 
 /**
- * Wait for network to settle after page load / action.
+ * Wait briefly after page load / action.
+ * Avoid networkidle — OiiOii keeps long-lived requests open and can hang ~30s per call.
  */
-async function waitForStable(page, ms = 2000) {
-  await page.waitForLoadState('networkidle').catch(() => {});
+async function waitForStable(page, ms = 1200) {
+  await page.waitForLoadState('domcontentloaded').catch(() => {});
   await page.waitForTimeout(ms);
 }
 
@@ -237,7 +238,7 @@ async function isLoggedOut(page) {
  * false-positive success via body text「20盒飯」before SUCCESS_RE was tightened.
  * Also dismiss stacked onboarding like「選擇你的創作方向」when a clear dismiss exists.
  */
-async function dismissBlockingDialogs(page, maxRounds = 4) {
+async function dismissBlockingDialogs(page, maxRounds = 3) {
   let dismissed = 0;
   for (let round = 0; round < maxRounds; round++) {
     let clicked = false;
@@ -256,10 +257,11 @@ async function dismissBlockingDialogs(page, maxRounds = 4) {
       // Skip claim / pay CTAs if they ever share the same modal shell.
       if (PLUS_REWARD_RE.test(label) || /購買|购买|訂閱|订阅|升級|升级|查看明細|查看明细/.test(label)) continue;
       log(`Dismissing blocking dialog via "${label}"…`);
-      await robustClick(page, btn, `dismiss-dialog "${label}"`).catch(async () => {
-        await btn.click({ force: true }).catch(() => {});
+      // Force-first: these modals often sit under pointer-blocking overlays in CI.
+      await btn.click({ force: true, timeout: 3_000 }).catch(async () => {
+        await robustClick(page, btn, `dismiss-dialog "${label}"`).catch(() => {});
       });
-      await waitForStable(page, 800);
+      await waitForStable(page, 500);
       dismissed += 1;
       clicked = true;
       break;
@@ -283,8 +285,8 @@ async function dismissBlockingDialogs(page, maxRounds = 4) {
         ).filter({ hasText: /^\s*[×xX✕]\s*$/ });
         if ((await closeBtn.count().catch(() => 0)) >= 1) {
           log('Dismissing blocking dialog via close (×)…');
-          await robustClick(page, closeBtn.first(), 'dismiss-dialog close').catch(() => {});
-          await waitForStable(page, 800);
+          await closeBtn.first().click({ force: true, timeout: 3_000 }).catch(() => {});
+          await waitForStable(page, 500);
           dismissed += 1;
           clicked = true;
         } else {
@@ -294,10 +296,10 @@ async function dismissBlockingDialogs(page, maxRounds = 4) {
         const btn = loose.first();
         const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
         log(`Dismissing blocking dialog (fallback) via "${label}"…`);
-        await robustClick(page, btn, `dismiss-dialog-fallback "${label}"`).catch(async () => {
-          await btn.click({ force: true }).catch(() => {});
+        await btn.click({ force: true, timeout: 3_000 }).catch(async () => {
+          await robustClick(page, btn, `dismiss-dialog-fallback "${label}"`).catch(() => {});
         });
-        await waitForStable(page, 800);
+        await waitForStable(page, 500);
         dismissed += 1;
         clicked = true;
       }

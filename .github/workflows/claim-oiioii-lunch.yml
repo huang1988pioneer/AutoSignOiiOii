@@ -144,7 +144,7 @@ jobs:
     name: claim (${{ matrix.account }}) - ${{ matrix.account == 1 && 'huang1988pioneer' || matrix.account == 2 && 'abuhg17' || matrix.account == 3 && 'goldshoot0720' || format('account-{0}', matrix.account) }}
     needs: [random_start, validate-storage-states]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -158,6 +158,7 @@ jobs:
       OII_SCREENSHOT_DIR: './screenshots'
     steps:
       - name: Wait for this account's turn
+        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
         shell: bash
         env:
           ACCOUNT_DELAYS: ${{ needs.random_start.outputs.account_delays }}
@@ -186,6 +187,7 @@ jobs:
 
       - name: Claim daily 盒飯
         if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
+        timeout-minutes: 8
         run: |
           npm run claim
 

@@ -11,6 +11,8 @@ const STATE_B64 = process.env.OII_STORAGE_STATE_B64;
 const COOKIE_HEADER = process.env.OII_COOKIE;
 const MAX_RETRIES = Number(process.env.OII_MAX_RETRIES) || 3;
 const SCREENSHOT_DIR = process.env.OII_SCREENSHOT_DIR || './screenshots';
+const RESULT_DIR = process.env.OII_RESULT_DIR || './artifacts';
+const ACCOUNT_NUMBER = Number(process.env.OII_ACCOUNT_NUMBER) || null;
 // chromium (default) | firefox | edge (fallbacks).
 // Aliases: chrome → chromium, msedge → edge.
 const BROWSER_NAME = (process.env.OII_BROWSER || 'chromium').toLowerCase().trim();
@@ -44,6 +46,18 @@ function warn(message) {
 
 function log(message) {
   console.log(`[account ${ACCOUNT_NAME}] ${message}`);
+}
+
+async function writeClaimResult(status, message) {
+  await mkdir(RESULT_DIR, { recursive: true });
+  const result = {
+    account: ACCOUNT_NUMBER,
+    name: ACCOUNT_NAME,
+    status,
+    message,
+    finishedAt: new Date().toISOString(),
+  };
+  await writeFile(join(RESULT_DIR, 'claim-result.json'), `${JSON.stringify(result, null, 2)}\n`);
 }
 
 /**
@@ -809,6 +823,7 @@ async function main() {
       try {
         const ok = await tryClaimOnce(browser, state, contextOptions);
         if (ok) {
+          await writeClaimResult('checked_in', 'Claim completed or was already claimed today.');
           log('Done.');
           return;
         }
@@ -840,7 +855,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
+  await writeClaimResult('failed', error.message).catch((writeError) => {
+    console.error(`Could not write claim result: ${writeError.message}`);
+  });
   console.error(error.message);
   process.exitCode = 1;
 });

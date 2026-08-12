@@ -156,6 +156,8 @@ jobs:
       OII_COOKIE: ${{ secrets[format('OII_COOKIE_{0}', matrix.account)] }}
       OII_MAX_RETRIES: '3'
       OII_SCREENSHOT_DIR: './screenshots'
+      OII_RESULT_DIR: './artifacts'
+      OII_ACCOUNT_NUMBER: ${{ matrix.account }}
     steps:
       - name: Wait for this account's turn
         if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
@@ -191,6 +193,24 @@ jobs:
         run: |
           npm run claim
 
+      - name: Write skipped account result
+        if: ${{ always() && env.OII_STORAGE_STATE_B64 == '' && env.OII_COOKIE == '' }}
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/claim-result.json <<'EOF'
+          {"account": ${{ matrix.account }}, "name": "${{ env.OII_ACCOUNT_NAME }}", "status": "skipped", "message": "No login state or cookie secret configured."}
+          EOF
+
+      - name: Upload account result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oiioii-claim-result-${{ matrix.account }}
+          path: artifacts/claim-result.json
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload screenshots
         if: ${{ always() && (env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '') }}
         uses: actions/upload-artifact@v4
@@ -199,3 +219,36 @@ jobs:
           path: screenshots/
           retention-days: 7
           if-no-files-found: ignore
+
+  daily-summary:
+    name: daily-summary
+    needs: claim
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download all account results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: oiioii-claim-result-*
+          path: collected
+          merge-multiple: false
+      - name: Build daily summary (Job Summary)
+        env:
+          OII_SUMMARY_DIR: artifacts
+          OII_EXPECTED_ACCOUNTS: '33'
+        run: npm run summary -- collected
+      - name: Upload daily summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oiioii-claim-report
+          path: |
+            artifacts/oiioii-daily-summary.md
+            artifacts/oiioii-daily-summary.json
+          if-no-files-found: warn
+          retention-days: 30

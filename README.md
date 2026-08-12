@@ -5,7 +5,7 @@
 ## 功能
 
 - 每日自動執行，或從 GitHub Actions 手動執行
-- 支援 1～3 個 OiiOii 帳號
+- 支援 1～33 個 OiiOii 帳號；未設定 Secret 的編號會自動略過
 - 優先使用 Playwright Storage State，也可使用 Cookie Header
 - 找不到按鈕或暫時失敗時，最多重試 3 次
 - 自動上傳執行截圖為 Artifact，保留 7 天
@@ -39,18 +39,18 @@ base64 -w0 auth.json
 
 | Secret | 用途 |
 | --- | --- |
-| `OII_STORAGE_STATE_B64_1` | 帳號 1 的 Base64 Storage State（建議） |
-| `OII_COOKIE_1` | 帳號 1 的 Cookie Header（可替代 Storage State） |
-| `OII_STORAGE_STATE_B64_2`、`OII_COOKIE_2` | 帳號 2（選填） |
-| `OII_STORAGE_STATE_B64_3`、`OII_COOKIE_3` | 帳號 3（選填） |
+| `OII_STORAGE_STATE_B64_1` … `OII_STORAGE_STATE_B64_33` | 各帳號的 Base64 Storage State（建議） |
+| `OII_COOKIE_1` … `OII_COOKIE_33` | 各帳號的 Cookie Header（可替代 Storage State） |
 
-每個帳號只要設定其中一種登入方式即可，且 Storage State 優先。未設定 Secret 的帳號會自動略過。
+每個帳號只要設定其中一種登入方式即可，且 Storage State 優先。workflow 會執行全部 33 個編號；未設定 Secret 的帳號會自動略過，不必連續編號。
+
+目前已具名的帳號為 `1`（huang1988pioneer）、`2`（abuhg17）、`3`（goldshoot0720）；其餘編號可按需要再補 Secret。
 
 請勿把 `auth.json`、Cookie 或任何登入憑證提交到儲存庫。
 
 ### 3. 手動驗證
 
-開啟儲存庫的 **Actions** 分頁，選擇 **Claim OiiOii daily lunch**，再按 **Run workflow**。執行完成後，可在該次 workflow 的 Artifacts 下載截圖。
+開啟儲存庫的 **Actions** 分頁，選擇 **Claim OiiOii daily lunch**，再按 **Run workflow**。執行完成後，可在 Job Summary 查看每日彙總，並在該次 workflow 的 Artifacts 下載截圖與 `oiioii-claim-report`。
 
 ## 每日自動執行時段
 
@@ -118,7 +118,7 @@ dotnet run --project OiiOiiFlow/OiiOiiFlow.csproj
 2. 在開啟的瀏覽器完成 OiiOii 登入，然後關閉瀏覽器。
 3. 在工具中讀取並複製 Base64，貼入相同編號的 GitHub Secret。
 
-工具可建立 `01` 至 `33` 編號的登入狀態，但目前 workflow 僅會執行帳號 `1`、`2`、`3`；請使用這三個編號。
+工具與 workflow 皆使用 `01` 至 `33` 編號。選好編號後，把 Base64 貼到對應的 `OII_STORAGE_STATE_B64_N` 即可；沒有 Secret 的編號不會實際開啟瀏覽器。
 
 ## 疑難排解
 

@@ -257,21 +257,42 @@ async function dismissBlockingDialogs(page, maxRounds = 3) {
   for (let round = 0; round < maxRounds; round++) {
     let clicked = false;
 
-    // Prefer explicit dismiss buttons on visible dialogs / modals.
-    const candidates = page.locator(
-      '[role="dialog"] button:visible, [class*="modal"] button:visible, [class*="dialog"] button:visible, [class*="popup"] button:visible, [class*="Message"] button:visible, [class*="message"] button:visible',
+    // 1. Close icon buttons (e.g. image-notification-modal's _image-close-btn, X, close)
+    const closeBtns = page.locator(
+      'button[class*="close"], [class*="close-btn"], [class*="_image-close-btn"], button:has-text("✕"), button:has-text("×"), [role="dialog"] button:not([class*="claim"]), [class*="modal"] button:not([class*="claim"])',
     );
+    const closeCount = await closeBtns.count().catch(() => 0);
+    for (let i = 0; i < Math.min(closeCount, 10); i++) {
+      const btn = closeBtns.nth(i);
+      if (!(await btn.isVisible().catch(() => false))) continue;
+      const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      const cls = (await btn.getAttribute('class').catch(() => '')) || '';
+      // Skip if this is actually a claim button or nav item
+      if (PLUS_REWARD_RE.test(label) || /購買|购买|訂閱|订阅|升級|升级/.test(label)) continue;
+      if (!label || label === '✕' || label === '×' || label === 'X' || /close/i.test(cls)) {
+        log(`Dismissing modal via close icon (${cls.slice(0, 30)})…`);
+        await btn.click({ force: true, timeout: 3_000 }).catch(async () => {
+          await robustClick(page, btn, 'modal-close-icon').catch(() => {});
+        });
+        await waitForStable(page, 500);
+        dismissed += 1;
+        clicked = true;
+        break;
+      }
+    }
+
+    // 2. Explicit dismiss buttons with text (e.g. "我知道了", "好的", "關閉", "Got it")
+    const candidates = page.locator(
+      'button:visible, [role="button"]:visible',
+    ).filter({ hasText: DISMISS_DIALOG_BTN_RE });
     const count = await candidates.count().catch(() => 0);
-    for (let i = 0; i < Math.min(count, 12); i++) {
+    for (let i = 0; i < Math.min(count, 8); i++) {
       const btn = candidates.nth(i);
       if (!(await btn.isVisible().catch(() => false))) continue;
       const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
       if (!label || label.length > 16) continue;
-      if (!DISMISS_DIALOG_BTN_RE.test(label)) continue;
-      // Skip claim / pay CTAs if they ever share the same modal shell.
       if (PLUS_REWARD_RE.test(label) || /購買|购买|訂閱|订阅|升級|升级|查看明細|查看明细/.test(label)) continue;
       log(`Dismissing blocking dialog via "${label}"…`);
-      // Force-first: these modals often sit under pointer-blocking overlays in CI.
       await btn.click({ force: true, timeout: 3_000 }).catch(async () => {
         await robustClick(page, btn, `dismiss-dialog "${label}"`).catch(() => {});
       });
@@ -279,44 +300,6 @@ async function dismissBlockingDialogs(page, maxRounds = 3) {
       dismissed += 1;
       clicked = true;
       break;
-    }
-
-    if (!clicked) {
-      // Fallback: any visible short dismiss button when a known blocking title is on screen.
-      const hasBlockingTitle = await page
-        .getByText(BLOCKING_DIALOG_TITLE_RE)
-        .first()
-        .isVisible()
-        .catch(() => false);
-      if (!hasBlockingTitle) break;
-
-      const loose = page.locator('button:visible, [role="button"]:visible').filter({ hasText: DISMISS_DIALOG_BTN_RE });
-      const looseCount = await loose.count().catch(() => 0);
-      if (looseCount < 1) {
-        // Try dialog close (X) as last resort for title-matched blockers.
-        const closeBtn = page.locator(
-          '[role="dialog"] button:visible, [class*="modal"] button:visible, [class*="dialog"] button:visible',
-        ).filter({ hasText: /^\s*[×xX✕]\s*$/ });
-        if ((await closeBtn.count().catch(() => 0)) >= 1) {
-          log('Dismissing blocking dialog via close (×)…');
-          await closeBtn.first().click({ force: true, timeout: 3_000 }).catch(() => {});
-          await waitForStable(page, 500);
-          dismissed += 1;
-          clicked = true;
-        } else {
-          break;
-        }
-      } else {
-        const btn = loose.first();
-        const label = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-        log(`Dismissing blocking dialog (fallback) via "${label}"…`);
-        await btn.click({ force: true, timeout: 3_000 }).catch(async () => {
-          await robustClick(page, btn, `dismiss-dialog-fallback "${label}"`).catch(() => {});
-        });
-        await waitForStable(page, 500);
-        dismissed += 1;
-        clicked = true;
-      }
     }
 
     if (!clicked) break;
@@ -343,7 +326,7 @@ function claimLocators(page) {
 }
 
 /**
- * Site CSS modules expose the daily claim control as e.g. `_credit-claim-btn_1dzjy_205`.
+ * Site CSS modules expose the daily claim control as e.g. `_credit-claim-btn_ba5u9_205`.
  * Prefer this over fragile text/DOM ancestry matching.
  */
 function creditClaimButtons(page) {
@@ -353,7 +336,11 @@ function creditClaimButtons(page) {
 }
 
 async function isAccountDrawerOpen(page) {
-  // Prefer the real claim / post-claim control or compact balance breakdown.
+  // Check if credit panel or daily free bonus container is visible
+  const drawerPanel = page.locator('[class*="credit-panel"], [class*="credit-daily-free-bonus"]');
+  if ((await drawerPanel.count().catch(() => 0)) >= 1) {
+    if (await drawerPanel.first().isVisible().catch(() => false)) return true;
+  }
   if ((await creditClaimButtons(page).count().catch(() => 0)) >= 1) {
     const btn = creditClaimButtons(page).first();
     if (await btn.isVisible().catch(() => false)) return true;
@@ -366,8 +353,7 @@ async function isAccountDrawerOpen(page) {
 
 /**
  * CI failure: `_overlay_*` intercepts pointer events over the claim button.
- * Disable pointer-events on full-screen / backdrop overlays without closing the drawer
- * (do not click the overlay — that dismisses the account panel).
+ * Disable pointer-events on full-screen / backdrop overlays without closing the drawer.
  */
 async function neutralizePointerBlockingOverlays(page) {
   const disabled = await page.evaluate(() => {
@@ -381,8 +367,7 @@ async function neutralizePointerBlockingOverlays(page) {
         rect.width >= window.innerWidth * 0.5 && rect.height >= window.innerHeight * 0.5;
       const looksLikeModuleOverlay = /overlay|mask|backdrop/i.test(el.className || '');
       if (!coversViewport && !looksLikeModuleOverlay) continue;
-      // Never disable the claim button itself or its ancestors with claim-btn class.
-      if (/credit-claim/i.test(el.className || '')) continue;
+      if (/credit-claim|credit-panel|credit-daily/i.test(el.className || '')) continue;
       el.style.setProperty('pointer-events', 'none', 'important');
       count += 1;
     }
@@ -426,7 +411,7 @@ async function robustClick(page, locator, label) {
 
 /**
  * Open the top-right account / 盒飯 drawer shown in the product UI.
- * The daily +N claim control is inside this panel, not on the bare homepage.
+ * In OiiOii's current UI, the drawer opens on HOVER over the points pill / avatar.
  */
 async function openAccountDrawer(page) {
   if (await isAccountDrawerOpen(page)) {
@@ -434,37 +419,39 @@ async function openAccountDrawer(page) {
     return true;
   }
 
+  await dismissBlockingDialogs(page);
+
   const openers = [
-    // Coin / balance chip in chrome: "52 BASE" (preferred — matches product screenshot).
+    // Points pill button: button[title="點數"], button[class*="_pill_"], div[class*="_credit-container_"]
+    page.locator('button[title="點數"], button[class*="_pill_"], div[class*="_credit-container_"]').first(),
+    // Coin / balance chip in chrome: "52 BASE"
     page
       .locator('button:visible, [role="button"]:visible, a:visible, div:visible, span:visible')
-      .filter({ hasText: /^\s*\d{1,6}\s*(?:BASE|盒飯|盒饭)\s*$/i }),
-    page
-      .locator('button:visible, [role="button"]:visible, a:visible')
-      .filter({ hasText: /\d{1,6}\s*(?:BASE|盒飯|盒饭)/i }),
+      .filter({ hasText: /^\s*\d{1,6}\s*(?:BASE|盒飯|盒饭)\s*$/i })
+      .first(),
     // Avatar / profile area near the top right
-    page
-      .locator('[class*="avatar"]:visible, [class*="Avatar"]:visible, img[alt*="avatar" i]:visible, img[class*="avatar" i]:visible')
-      .locator('xpath=ancestor-or-self::*[self::button or @role="button" or self::a or self::div][1]'),
-    page.getByRole('button', { name: /BASE|帳戶|账户|profile|account/i }),
+    page.locator('img[alt*="頭像" i], img[class*="avatar" i], [class*="avatar" i]').first(),
   ];
 
   for (const opener of openers) {
-    const count = await opener.count().catch(() => 0);
-    for (let i = 0; i < Math.min(count, 8); i++) {
-      const el = opener.nth(i);
-      if (!(await el.isVisible().catch(() => false))) continue;
-      const text = ((await el.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-      // Skip pure navigation / paid CTAs and huge containers.
-      if (text.length > 40) continue;
-      if (/購買|购买|訂閱|订阅|活動|活动|通知|邀請|邀请/.test(text) && !/(?:盒飯|盒饭|BASE)/i.test(text)) continue;
-      log(`Opening account drawer via control: "${text.slice(0, 40) || '(icon)'}"…`);
-      await robustClick(page, el, `drawer-opener "${text.slice(0, 24) || 'icon'}"`).catch(() => {});
-      await waitForStable(page, 1200);
-      if (await isAccountDrawerOpen(page)) {
-        log('Account drawer opened.');
-        return true;
-      }
+    if (!(await opener.isVisible().catch(() => false))) continue;
+    await dismissBlockingDialogs(page);
+    log('Hovering over points pill / avatar to open account drawer…');
+    await opener.hover({ force: true }).catch(() => {});
+    await waitForStable(page, 1000);
+    if (await isAccountDrawerOpen(page)) {
+      log('Account drawer opened on hover.');
+      return true;
+    }
+
+    // Try click if hover did not trigger it
+    await dismissBlockingDialogs(page);
+    log('Clicking points pill / avatar to open account drawer…');
+    await robustClick(page, opener, 'drawer-opener').catch(() => {});
+    await waitForStable(page, 1000);
+    if (await isAccountDrawerOpen(page)) {
+      log('Account drawer opened on click.');
+      return true;
     }
   }
 
@@ -476,6 +463,16 @@ async function openAccountDrawer(page) {
  * True when the account drawer shows the post-claim chip「明天見！」instead of +N.
  */
 async function isAlreadyClaimedUi(page) {
+  // Check within credit panel or free bonus box first
+  const panel = page.locator('[class*="credit-panel"], [class*="credit-daily-free-bonus"]');
+  if ((await panel.count().catch(() => 0)) >= 1) {
+    const text = (await panel.first().innerText().catch(() => '')) || '';
+    if (SEE_YOU_TOMORROW_RE.test(text) || /明天見|明天见/.test(text)) {
+      log(`Detected already-claimed text in credit panel: "明天見！"`);
+      return true;
+    }
+  }
+
   const chips = page.locator(
     'button:visible, [role="button"]:visible, div:visible, span:visible, a:visible',
   );
@@ -593,23 +590,13 @@ async function findDailyPlusButton(page) {
 async function bodyLooksClaimedOrSuccess(page) {
   // Drawer chip is more reliable than scanning the whole body for generic words.
   if (await isAlreadyClaimedUi(page)) return 'already';
-  const body = await page.locator('body').innerText();
-  // Prefer "already" over generic "成功" which appears in marketing copy.
-  if (ALREADY_CLAIMED_RE.test(body)) return 'already';
-  if (SUCCESS_RE.test(body)) return 'success';
+  // Check if credit panel specifically shows success or 明天見
+  const panel = page.locator('[class*="credit-panel"], [class*="credit-daily-free-bonus"]');
+  if ((await panel.count().catch(() => 0)) >= 1) {
+    const text = (await panel.first().innerText().catch(() => '')) || '';
+    if (SEE_YOU_TOMORROW_RE.test(text) || /明天見|明天见/.test(text)) return 'already';
+  }
   return null;
-}
-
-async function claimButtonStillPresent(page) {
-  if (await isAlreadyClaimedUi(page)) return false;
-  const btn = await findDailyPlusButton(page);
-  if (!btn) return false;
-  // After a successful claim the pink +N often disables, renames, or vanishes.
-  const disabled = await btn.isDisabled().catch(() => false);
-  if (disabled) return false;
-  const text = ((await btn.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-  if (/已領|已领|已簽|已签|claimed|done|完成|明天見|明天见/i.test(text)) return false;
-  return true;
 }
 
 async function clickClaimAndConfirm(page, btn, source) {
@@ -641,21 +628,26 @@ async function clickClaimAndConfirm(page, btn, source) {
     await waitForStable(page, 1500);
   }
 
+  // Ensure drawer is open/re-hovered to inspect post-claim state
+  await openAccountDrawer(page);
+
+  if (await isAlreadyClaimedUi(page)) {
+    log(`✅ Daily OiiOii 盒飯 claim succeeded (${source}: drawer shows 明天見).`);
+    await saveScreenshot(page, 'claim-success');
+    return true;
+  }
+
   const status = await bodyLooksClaimedOrSuccess(page);
-  if (status === 'success') {
+  if (status === 'already' || status === 'success') {
     log(`✅ Daily OiiOii 盒飯 claim succeeded (${source}).`);
     await saveScreenshot(page, 'claim-success');
     return true;
   }
-  if (status === 'already') {
-    log('✅ Daily 盒飯 was already claimed today.');
-    await saveScreenshot(page, 'already-claimed');
-    return true;
-  }
 
-  // Soft success: daily +N control disappeared / disabled after click / became 明天見.
-  if (!(await claimButtonStillPresent(page))) {
-    log(`✅ Claim control gone, disabled, or 明天見 after click (${source}); treating as success.`);
+  // Check if +N button disappeared or became disabled
+  const plusBtn = await findDailyPlusButton(page);
+  if (!plusBtn) {
+    log(`✅ Claim button no longer present after click (${source}); treating as success.`);
     await saveScreenshot(page, 'claim-button-gone');
     return true;
   }
@@ -666,14 +658,13 @@ async function clickClaimAndConfirm(page, btn, source) {
 }
 
 async function tryClaimOnPage(page, source) {
-  // Clear expiry / onboarding modals before opening the coin drawer.
+  // Clear expiry / onboarding / image notification modals before opening the coin drawer.
   await dismissBlockingDialogs(page);
 
   // Preferred path: account drawer → credit-claim-btn / pink "+ N" (current OiiOii UI).
   await openAccountDrawer(page);
 
   // Already claimed today: purple chip「明天見！」replaces +20 (see product screenshot).
-  // Only trust drawer-local chips — not whole-page marketing / expiry copy.
   if (await isAlreadyClaimedUi(page)) {
     log(`✅ Daily 盒飯 already claimed today (${source}: 明天見 UI).`);
     await saveScreenshot(page, 'already-claimed');
@@ -718,17 +709,8 @@ async function tryClaimOnPage(page, source) {
   }
 
   if (safeButtons.length === 0) {
-    // Prefer drawer chip「明天見！」over scanning whole body (expiry modals used to false-positive).
     if (await isAlreadyClaimedUi(page)) {
       log(`✅ Daily 盒飯 already claimed today (${source}: 明天見 UI, no claim button).`);
-      await saveScreenshot(page, 'already-claimed');
-      return true;
-    }
-    const status = await bodyLooksClaimedOrSuccess(page);
-    // Only accept "already" from body heuristics when no claim control exists.
-    // Do not accept generic "success" without having clicked a claim control.
-    if (status === 'already') {
-      log('✅ Daily 盒飯 was already claimed today.');
       await saveScreenshot(page, 'already-claimed');
       return true;
     }

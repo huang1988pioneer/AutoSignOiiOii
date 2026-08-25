@@ -2,8 +2,13 @@ name: Claim OiiOii daily lunch
 
 on:
   schedule:
-    # GitHub Actions uses UTC. These are 05:00, 13:00, and 21:00 Asia/Taipei.
+    # GitHub Actions uses UTC.
+    # 05:00, 13:00, and 21:00 Asia/Taipei (UTC 21:00, 05:00, 13:00)
     - cron: '0 21,5,13 * * *'
+    # 08:18 Asia/Taipei (UTC 00:18)
+    - cron: '18 0 * * *'
+    # 09:19 Asia/Taipei (UTC 01:19)
+    - cron: '19 1 * * *'
   workflow_dispatch:
 
 permissions:

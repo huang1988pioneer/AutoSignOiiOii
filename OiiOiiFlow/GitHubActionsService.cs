@@ -24,8 +24,15 @@ internal sealed class GitHubActionsService
         var latest = runs.OrderByDescending(run => run.CreatedAt).FirstOrDefault();
 
         var timeZone = GetTaipeiTimeZone();
-        var successfulDates = runs
-            .Where(run => string.Equals(run.Conclusion, "success", StringComparison.OrdinalIgnoreCase))
+        var successfulRuns = runs
+            .Where(run => run.IsSuccessful)
+            .OrderByDescending(run => run.CreatedAt)
+            .ToArray();
+        var failedRuns = runs
+            .Where(run => run.IsFailed)
+            .OrderByDescending(run => run.CreatedAt)
+            .ToArray();
+        var successfulDates = successfulRuns
             .Select(run => TimeZoneInfo.ConvertTime(run.CreatedAt, timeZone).Date)
             .ToHashSet();
         var today = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZone).Date;
@@ -40,8 +47,15 @@ internal sealed class GitHubActionsService
             accountResultsByRun[latest.DatabaseId] = await GetAccountResultsAsync(latest.DatabaseId);
         var accounts = latest is null ? [] : accountResultsByRun[latest.DatabaseId];
 
-        var consecutiveDays = 0;
-        while (successfulDates.Contains(today.AddDays(-consecutiveDays))) consecutiveDays++;
+        var consecutiveSuccessActionDays = 0;
+        while (successfulDates.Contains(today.AddDays(-consecutiveSuccessActionDays))) consecutiveSuccessActionDays++;
+
+        var lastSuccessfulActionTime = successfulRuns.FirstOrDefault() is { } successfulRun
+            ? TimeZoneInfo.ConvertTime(successfulRun.CreatedAt, timeZone)
+            : (DateTimeOffset?)null;
+        var lastFailedActionTime = failedRuns.FirstOrDefault() is { } failedRun
+            ? TimeZoneInfo.ConvertTime(failedRun.CreatedAt, timeZone)
+            : (DateTimeOffset?)null;
 
         var successful = accounts.Where(account => account.IsConfigured && account.IsSuccessful).ToArray();
         var failed = accounts.Where(account => account.IsConfigured && account.IsCompleted && !account.IsSuccessful).ToArray();
@@ -58,7 +72,9 @@ internal sealed class GitHubActionsService
             accounts,
             successful,
             failed,
-            consecutiveDays,
+            lastSuccessfulActionTime,
+            lastFailedActionTime,
+            consecutiveSuccessActionDays,
             pointsPerClaim,
             monthlyClaimedPoints);
     }
@@ -129,7 +145,12 @@ internal sealed class GitHubActionsService
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 }
 
-internal sealed record WorkflowRun(long DatabaseId, DateTimeOffset CreatedAt, string Conclusion, string Status, string Url, string Event);
+internal sealed record WorkflowRun(long DatabaseId, DateTimeOffset CreatedAt, string Conclusion, string Status, string Url, string Event)
+{
+    public bool IsSuccessful => string.Equals(Conclusion, "success", StringComparison.OrdinalIgnoreCase);
+    public bool IsCompleted => string.Equals(Status, "completed", StringComparison.OrdinalIgnoreCase);
+    public bool IsFailed => IsCompleted && !string.IsNullOrWhiteSpace(Conclusion) && !IsSuccessful;
+}
 
 internal sealed record AccountResult(int Number, string Alias, string Status, string Conclusion)
 {
@@ -143,6 +164,8 @@ internal sealed record DashboardSnapshot(
     AccountResult[] Accounts,
     AccountResult[] SuccessfulAccounts,
     AccountResult[] FailedAccounts,
-    int ConsecutiveDays,
+    DateTimeOffset? LastSuccessfulActionTime,
+    DateTimeOffset? LastFailedActionTime,
+    int ConsecutiveSuccessActionDays,
     decimal PointsPerClaim,
     decimal MonthlyClaimedPoints);

@@ -156,8 +156,10 @@ public partial class MainWindow : Window
     private void RenderDashboard(DashboardSnapshot snapshot)
     {
         SuccessfulAccountsMetric.Text = $"{snapshot.SuccessfulAccounts.Length} 個";
-        ConsecutiveDaysMetric.Text = $"{snapshot.ConsecutiveDays} 天";
+        ConsecutiveSuccessActionDaysMetric.Text = $"{snapshot.ConsecutiveSuccessActionDays} 天";
         MonthlyPointsMetric.Text = snapshot.MonthlyClaimedPoints.ToString("0.##");
+        LastSuccessfulActionMetric.Text = FormatActionTime(snapshot.LastSuccessfulActionTime);
+        LastFailedActionMetric.Text = FormatActionTime(snapshot.LastFailedActionTime);
 
         if (snapshot.LatestRun is null)
         {
@@ -199,6 +201,9 @@ public partial class MainWindow : Window
         if (snapshot.Accounts.Length == 0)
             ActionAccountResultsPanel.Children.Add(new TextBlock { Text = "最新 run 尚未建立帳號 job；請稍後再更新。" });
     }
+
+    private static string FormatActionTime(DateTimeOffset? actionTime) =>
+        actionTime is { } value ? value.ToString("yyyy/MM/dd HH:mm") : "—";
 
     private async void CopyStateButton_OnClick(object? sender, RoutedEventArgs e)
     {

@@ -236,6 +236,11 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: oiioii-result-publish
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -247,11 +252,38 @@ jobs:
           pattern: oiioii-claim-result-*
           path: collected
           merge-multiple: false
+      - name: Load check-in history from result branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # Query first so network/permission failures cannot look like a missing branch.
+          remote_ref=$(git ls-remote --heads origin refs/heads/result)
+          if [[ -n "$remote_ref" ]]; then
+            git fetch origin refs/heads/result
+            git worktree add --detach "$RUNNER_TEMP/oiioii-result" FETCH_HEAD
+          else
+            git worktree add --detach "$RUNNER_TEMP/oiioii-result" HEAD
+            git -C "$RUNNER_TEMP/oiioii-result" switch --orphan result
+          fi
       - name: Build daily summary (Job Summary)
         env:
           OII_SUMMARY_DIR: artifacts
           OII_EXPECTED_ACCOUNTS: '33'
+          OII_STREAKS_FILE: ${{ runner.temp }}/oiioii-result/streaks.json
         run: npm run summary -- collected
+      - name: Publish streaks.json to result branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp artifacts/streaks.json "$RUNNER_TEMP/oiioii-result/streaks.json"
+          cd "$RUNNER_TEMP/oiioii-result"
+          git add streaks.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update OiiOii check-in results"
+            git push origin HEAD:refs/heads/result
+          fi
       - name: Upload daily summary
         if: always()
         uses: actions/upload-artifact@v4
@@ -260,5 +292,6 @@ jobs:
           path: |
             artifacts/oiioii-daily-summary.md
             artifacts/oiioii-daily-summary.json
+            artifacts/streaks.json
           if-no-files-found: warn
           retention-days: 30

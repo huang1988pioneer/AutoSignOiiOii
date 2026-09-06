@@ -52,6 +52,10 @@ base64 -w0 auth.json
 
 開啟儲存庫的 **Actions** 分頁，選擇 **Claim OiiOii daily lunch**，再按 **Run workflow**。執行完成後，可在 Job Summary 查看每日彙總，並在該次 workflow 的 Artifacts 下載截圖與 `oiioii-claim-report`。
 
+`daily-summary` 也會使用 `GITHUB_TOKEN` 自動建立或更新 **`result` 分支**（單數）的 [`streaks.json`](https://github.com/huang1988pioneer/AutoSignOiiOii/blob/result/streaks.json)，並將同一份 JSON 附在 `oiioii-claim-report`。只有此 job 取得 `contents: write` 權限；若儲存庫規則禁止 Actions 寫入該分支，發布步驟會報錯。
+
+JSON 採用參考專案的 `generatedAt`、`runUrl`、`title`、`accounts`、`summary` 結構；每個帳號提供 `account`、`name`、`label`、`status`、`finishedAt`、`currentPoints` 與相同數值的 `remainingCredits`。零點保留為 `0`，無法取得的點數為 `null`。連續簽到天數 `streak` 由本專案的成功紀錄計算（`streakSource: recorded_check_ins`），以台北日期為準，並保存 `lastCheckInDate` 與去重後的 `checkInDates`。同日重跑或已領取不會重複加天；連續兩日成功會加 1，漏簽後下次成功從 1 開始。同日失敗或略過不會抹除已成功紀錄，昨日的連續紀錄保留到今日結束；超過一天未成功則顯示 0。首次啟用從首次觀測成功算起，不追溯網站上既有天數。`summary.max/min/average` 統計全部帳號（含 0 天），`summary.recorded` 為帳號筆數。Job Summary 同時顯示連續簽到天數。本機執行預設讀取輸出目錄既有的 `streaks.json`，也可用 `OII_STREAKS_FILE` 指定歷史檔案；歷史格式損壞會停止產生，避免覆蓋紀錄。公開檔案不包含登入狀態、Cookie 或錯誤訊息。
+
 ## 每日自動執行時段
 
 GitHub Actions 每天會在下列台北時間（UTC+8）各自執行一次：

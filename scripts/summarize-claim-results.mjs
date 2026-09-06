@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { updateStreak } from './streaks.mjs';
 
 const inputDir = process.argv[2] || 'collected';
 const outputDir = process.env.OII_SUMMARY_DIR || 'artifacts';
@@ -42,6 +43,13 @@ const rows = Array.from({ length: expectedAccounts }, (_, index) => {
     message: 'No login state or cookie secret configured.',
   };
 });
+
+const generatedAt = new Date().toISOString();
+const historyPath = process.env.OII_STREAKS_FILE || join(outputDir, 'streaks.json');
+const history = existsSync(historyPath) ? JSON.parse(readFileSync(historyPath, 'utf8')) : { accounts: [] };
+if (!Array.isArray(history.accounts)) throw new Error('Invalid streak history: accounts must be an array');
+const previousAccounts = new Map(history.accounts.map((row) => [Number(row.account), row]));
+for (const row of rows) Object.assign(row, updateStreak(row, previousAccounts.get(row.account), generatedAt));
 
 const counts = {
   checked_in: rows.filter((row) => row.status === 'checked_in').length,
@@ -111,25 +119,54 @@ if (expiring.length) {
 
 const activeRows = rows.filter((row) => row.status !== 'skipped');
 if (activeRows.length) {
-  lines.push('### Account results', '', '| # | Account | Status | 當前點數 | Note |', '| ---: | --- | --- | ---: | --- |');
+  lines.push('### Account results', '', '| # | Account | Status | 當前點數 | 連續簽到天數 | Note |', '| ---: | --- | --- | ---: | ---: | --- |');
   for (const row of activeRows) {
     const badge = row.status === 'checked_in' ? '✅ checked_in' : '❌ failed';
     const points = typeof row.currentPoints === 'number' && Number.isFinite(row.currentPoints) && row.currentPoints >= 0
       ? row.currentPoints.toLocaleString('en-US') : '無法取得';
-    lines.push(`| ${row.account} | ${escapeCell(row.name)} | ${badge} | ${points} | ${escapeCell(compact(row.message))} |`);
+    lines.push(`| ${row.account} | ${escapeCell(row.name)} | ${badge} | ${points} | ${row.streak} | ${escapeCell(compact(row.message))} |`);
   }
   lines.push('');
 }
 
 lines.push('---', '', '<sub>Status: `checked_in` = claimed this run or already claimed today · `failed` = session or claim issue · `skipped` = secret not configured</sub>', '');
 const markdown = lines.join('\n');
+// Publish only display data; session details and error messages stay in artifacts.
+const accounts = rows.map((row) => ({
+  account: row.account,
+  name: row.name,
+  label: row.name,
+  status: row.status,
+  streak: row.streak,
+  lastCheckInDate: row.lastCheckInDate,
+  checkInDates: row.checkInDates,
+  currentPoints: typeof row.currentPoints === 'number' && Number.isFinite(row.currentPoints) && row.currentPoints >= 0
+    ? row.currentPoints : null,
+  remainingCredits: typeof row.currentPoints === 'number' && Number.isFinite(row.currentPoints) && row.currentPoints >= 0
+    ? row.currentPoints : null,
+  finishedAt: row.finishedAt ?? null,
+}));
 mkdirSync(outputDir, { recursive: true });
+writeFileSync(join(outputDir, 'streaks.json'), `${JSON.stringify({
+  generatedAt,
+  runUrl,
+  title: 'OiiOii daily check-in results',
+  accounts,
+  timeZone: 'Asia/Taipei',
+  streakSource: 'recorded_check_ins',
+  summary: {
+    recorded: accounts.length,
+    max: accounts.length ? Math.max(...accounts.map((row) => row.streak)) : 0,
+    min: accounts.length ? Math.min(...accounts.map((row) => row.streak)) : 0,
+    average: accounts.length ? Number((accounts.reduce((sum, row) => sum + row.streak, 0) / accounts.length).toFixed(1)) : 0,
+  },
+}, null, 2)}\n`);
 writeFileSync(join(outputDir, 'oiioii-daily-summary.md'), markdown);
 writeFileSync(
   join(outputDir, 'oiioii-daily-summary.json'),
   `${JSON.stringify(
     {
-      generatedAt: new Date().toISOString(),
+      generatedAt,
       counts,
       sessions: {
         warnDays: sessionWarnDays,

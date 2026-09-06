@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-06T09:05:18.328Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34023430452",
+  "generatedAt": "2026-09-06T16:34:40.992Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34043655630",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -8,42 +8,45 @@
       "name": "huang1988pioneer",
       "label": "huang1988pioneer",
       "status": "checked_in",
-      "streak": 1,
-      "lastCheckInDate": "2026-09-06",
+      "streak": 2,
+      "lastCheckInDate": "2026-09-07",
       "checkInDates": [
-        "2026-09-06"
+        "2026-09-06",
+        "2026-09-07"
       ],
       "currentPoints": 1,
       "remainingCredits": 1,
-      "finishedAt": "2026-09-06T09:04:47.851Z"
+      "finishedAt": "2026-09-06T16:33:14.290Z"
     },
     {
       "account": 2,
       "name": "abuhg17",
       "label": "abuhg17",
       "status": "checked_in",
-      "streak": 1,
-      "lastCheckInDate": "2026-09-06",
+      "streak": 2,
+      "lastCheckInDate": "2026-09-07",
       "checkInDates": [
-        "2026-09-06"
+        "2026-09-06",
+        "2026-09-07"
       ],
       "currentPoints": 12,
       "remainingCredits": 12,
-      "finishedAt": "2026-09-06T09:04:59.845Z"
+      "finishedAt": "2026-09-06T16:33:41.101Z"
     },
     {
       "account": 3,
       "name": "goldshoot0720",
       "label": "goldshoot0720",
       "status": "checked_in",
-      "streak": 1,
-      "lastCheckInDate": "2026-09-06",
+      "streak": 2,
+      "lastCheckInDate": "2026-09-07",
       "checkInDates": [
-        "2026-09-06"
+        "2026-09-06",
+        "2026-09-07"
       ],
       "currentPoints": 55,
       "remainingCredits": 55,
-      "finishedAt": "2026-09-06T09:03:28.382Z"
+      "finishedAt": "2026-09-06T16:34:07.161Z"
     },
     {
       "account": 4,
@@ -410,8 +413,8 @@
   "streakSource": "recorded_check_ins",
   "summary": {
     "recorded": 33,
-    "max": 1,
+    "max": 2,
     "min": 0,
-    "average": 0.1
+    "average": 0.2
   }
 }

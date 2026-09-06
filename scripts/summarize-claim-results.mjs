@@ -4,6 +4,7 @@ import { join } from 'node:path';
 const inputDir = process.argv[2] || 'collected';
 const outputDir = process.env.OII_SUMMARY_DIR || 'artifacts';
 const expectedAccounts = Number(process.env.OII_EXPECTED_ACCOUNTS || 33);
+const sessionWarnDays = Number(process.env.OII_SESSION_WARN_DAYS) || 7;
 
 function walkJsonFiles(dir) {
   if (!existsSync(dir)) return [];
@@ -48,7 +49,20 @@ const counts = {
   skipped: rows.filter((row) => row.status === 'skipped').length,
 };
 const configured = counts.checked_in + counts.failed;
-const headline = counts.failed ? `⚠️ ${counts.failed} account(s) need attention` : configured ? '✅ All configured accounts OK' : '⚠️ No configured accounts';
+
+// Logins that still work but are running out of time — surfaced before they fail.
+const expiring = rows
+  .filter((row) => typeof row.session?.daysLeft === 'number' && row.session.daysLeft <= sessionWarnDays)
+  .sort((a, b) => a.session.daysLeft - b.session.daysLeft);
+const rotated = rows.filter((row) => row.rotation?.rotated === true).length;
+
+const headline = counts.failed
+  ? `⚠️ ${counts.failed} account(s) need attention`
+  : expiring.length
+    ? `⏳ ${expiring.length} login(s) expiring within ${sessionWarnDays} day(s)`
+    : configured
+      ? '✅ All configured accounts OK'
+      : '⚠️ No configured accounts';
 const runUrl = process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
   : null;
@@ -64,6 +78,8 @@ const lines = [
   `| Claim successful | ${counts.checked_in} |`,
   `| Failed | ${counts.failed} |`,
   `| Skipped (no secret) | ${counts.skipped} |`,
+  `| Session secrets rotated | ${rotated} |`,
+  `| Logins expiring ≤ ${sessionWarnDays}d | ${expiring.length} |`,
   '',
   ...(runUrl ? [`- Workflow run: ${runUrl}`, ''] : []),
 ];
@@ -72,6 +88,24 @@ const failures = rows.filter((row) => row.status === 'failed');
 if (failures.length) {
   lines.push('### ⚠️ Needs attention', '', '| # | Account | Error |', '| ---: | --- | --- |');
   for (const row of failures) lines.push(`| ${row.account} | ${escapeCell(row.name)} | ${escapeCell(compact(row.message, 160))} |`);
+  lines.push('');
+}
+
+if (expiring.length) {
+  lines.push(
+    `### ⏳ Logins expiring within ${sessionWarnDays} day(s)`,
+    '',
+    'Re-run the OiiOiiFlow login for these accounts and update their `OII_STORAGE_STATE_B64_*` Secret.',
+    '',
+    '| # | Account | Days left | Expires | Credential |',
+    '| ---: | --- | ---: | --- | --- |',
+  );
+  for (const row of expiring) {
+    const { daysLeft, expiresAt, source } = row.session;
+    lines.push(
+      `| ${row.account} | ${escapeCell(row.name)} | ${daysLeft} | ${escapeCell(expiresAt)} | ${escapeCell(source)} |`,
+    );
+  }
   lines.push('');
 }
 
@@ -89,6 +123,22 @@ lines.push('---', '', '<sub>Status: `checked_in` = claimed this run or already c
 const markdown = lines.join('\n');
 mkdirSync(outputDir, { recursive: true });
 writeFileSync(join(outputDir, 'oiioii-daily-summary.md'), markdown);
-writeFileSync(join(outputDir, 'oiioii-daily-summary.json'), `${JSON.stringify({ generatedAt: new Date().toISOString(), counts, rows }, null, 2)}\n`);
+writeFileSync(
+  join(outputDir, 'oiioii-daily-summary.json'),
+  `${JSON.stringify(
+    {
+      generatedAt: new Date().toISOString(),
+      counts,
+      sessions: {
+        warnDays: sessionWarnDays,
+        rotated,
+        expiringSoon: expiring.map((row) => ({ account: row.account, name: row.name, ...row.session })),
+      },
+      rows,
+    },
+    null,
+    2,
+  )}\n`,
+);
 console.log(markdown);
 if (process.env.GITHUB_STEP_SUMMARY) writeFileSync(process.env.GITHUB_STEP_SUMMARY, markdown, { flag: 'a' });

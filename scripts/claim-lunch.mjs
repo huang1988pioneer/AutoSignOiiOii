@@ -2,6 +2,7 @@ import { chromium, firefox } from 'playwright';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { canRotate, inspectSession, updateRepositorySecret } from './session-store.mjs';
 
 // ─── Configuration ──────────────────────────────────────────────────────────────
 const HOME_URL = 'https://www.oiioii.ai/';
@@ -13,6 +14,17 @@ const MAX_RETRIES = Number(process.env.OII_MAX_RETRIES) || 3;
 const SCREENSHOT_DIR = process.env.OII_SCREENSHOT_DIR || './screenshots';
 const RESULT_DIR = process.env.OII_RESULT_DIR || './artifacts';
 const ACCOUNT_NUMBER = Number(process.env.OII_ACCOUNT_NUMBER) || null;
+// Session rotation: write the refreshed storage state back to its own Secret so a
+// sliding-expiry login keeps renewing itself instead of dying on a fixed date.
+// Needs a PAT with "Secrets: read and write" — GITHUB_TOKEN cannot write secrets.
+const SECRET_WRITE_TOKEN = process.env.OII_SECRET_WRITE_TOKEN;
+const SECRET_NAME =
+  process.env.OII_SECRET_NAME ||
+  (ACCOUNT_NUMBER ? `OII_STORAGE_STATE_B64_${ACCOUNT_NUMBER}` : null);
+const REPOSITORY = process.env.GITHUB_REPOSITORY;
+const GITHUB_API_URL = process.env.GITHUB_API_URL || 'https://api.github.com';
+// Warn this many days before the login credential expires.
+const SESSION_WARN_DAYS = Number(process.env.OII_SESSION_WARN_DAYS) || 7;
 // chromium (default) | firefox | edge (fallbacks).
 // Aliases: chrome → chromium, msedge → edge.
 const BROWSER_NAME = (process.env.OII_BROWSER || 'chromium').toLowerCase().trim();
@@ -48,6 +60,10 @@ function log(message) {
   console.log(`[account ${ACCOUNT_NAME}] ${message}`);
 }
 
+// Session facts collected during the run and folded into claim-result.json, so the
+// daily summary can flag logins that are about to expire.
+const sessionReport = { session: null, rotation: null };
+
 async function writeClaimResult(status, message) {
   await mkdir(RESULT_DIR, { recursive: true });
   const result = {
@@ -56,6 +72,7 @@ async function writeClaimResult(status, message) {
     status,
     message,
     finishedAt: new Date().toISOString(),
+    ...sessionReport,
   };
   await writeFile(join(RESULT_DIR, 'claim-result.json'), `${JSON.stringify(result, null, 2)}\n`);
 }
@@ -145,14 +162,89 @@ async function storageStateFile() {
   if (!STATE_B64) return undefined;
   const directory = await mkdtemp(join(tmpdir(), 'oiioii-state-'));
   const file = join(directory, 'storage-state.json');
+  let parsed;
   try {
-    JSON.parse(Buffer.from(STATE_B64, 'base64').toString('utf8'));
+    parsed = JSON.parse(Buffer.from(STATE_B64, 'base64').toString('utf8'));
   } catch {
     await rm(directory, { recursive: true, force: true });
     fail('OII_STORAGE_STATE_B64 is not valid base64-encoded Playwright storage state JSON.');
   }
   await writeFile(file, Buffer.from(STATE_B64, 'base64'));
-  return { directory, file };
+  return { directory, file, parsed };
+}
+
+/**
+ * Record how long the login has left and warn when it is close to expiring.
+ * Purely informational — never fails the run.
+ */
+function reportSessionLifetime(state, label) {
+  const info = inspectSession(state);
+  sessionReport.session = { ...info, checkedAt: new Date().toISOString() };
+
+  if (info.daysLeft === null) {
+    log(
+      `Session (${label}): ${info.cookieCount} cookie(s), no dated credential found — ` +
+        'expiry cannot be predicted.',
+    );
+    return info;
+  }
+
+  const detail = `expires ${info.expiresAt} (${info.daysLeft}d left, from ${info.source})`;
+  if (info.daysLeft <= SESSION_WARN_DAYS) {
+    warn(
+      `Login credential ${detail}. Re-run the OiiOiiFlow login and update ` +
+        `${SECRET_NAME ?? 'the storage-state Secret'} before it lapses.`,
+    );
+  } else {
+    log(`Session (${label}): ${detail}.`);
+  }
+  return info;
+}
+
+/**
+ * Write the post-run storage state back to its Secret, so a session that the site
+ * renews on each visit stays alive without a manual re-login.
+ * Skipped (with a reason, never an error) when it is not configured or not safe.
+ */
+async function rotateStoredSession(previous, next) {
+  if (!next) return;
+
+  if (!SECRET_WRITE_TOKEN) {
+    sessionReport.rotation = { rotated: false, reason: 'OII_SECRET_WRITE_TOKEN not configured' };
+    return;
+  }
+  if (!REPOSITORY || !SECRET_NAME) {
+    sessionReport.rotation = {
+      rotated: false,
+      reason: 'GITHUB_REPOSITORY or the target secret name is unknown',
+    };
+    return;
+  }
+
+  const verdict = canRotate(previous ?? { cookies: [], origins: [] }, next);
+  if (!verdict.ok) {
+    if (verdict.reason !== 'unchanged') {
+      warn(`Not rotating ${SECRET_NAME}: ${verdict.reason}.`);
+    }
+    sessionReport.rotation = { rotated: false, reason: verdict.reason, secret: SECRET_NAME };
+    return;
+  }
+
+  try {
+    await updateRepositorySecret({
+      repository: REPOSITORY,
+      secretName: SECRET_NAME,
+      value: Buffer.from(JSON.stringify(next), 'utf8').toString('base64'),
+      token: SECRET_WRITE_TOKEN,
+      apiUrl: GITHUB_API_URL,
+    });
+    log(`Rotated ${SECRET_NAME} with the refreshed login state.`);
+    sessionReport.rotation = { rotated: true, secret: SECRET_NAME };
+  } catch (error) {
+    // A failed rotation costs us nothing this run — the old secret still works.
+    warn(`Could not rotate ${SECRET_NAME}: ${error.message}`);
+    sessionReport.rotation = { rotated: false, reason: error.message, secret: SECRET_NAME };
+  }
 }
 
 /**
@@ -723,6 +815,10 @@ async function tryClaimOnPage(page, source) {
   return clickClaimAndConfirm(page, safeButtons[0], source);
 }
 
+// Storage state as it stood at the end of the most recent attempt that reached a
+// logged-in page. Whatever the site refreshed during the visit lives here.
+let refreshedState = null;
+
 async function tryClaimOnce(browser, state, contextOptions = {}) {
   const context = await browser.newContext({
     ...(state ? { storageState: state.file } : {}),
@@ -731,6 +827,7 @@ async function tryClaimOnce(browser, state, contextOptions = {}) {
   if (COOKIE_HEADER) await context.addCookies(parseCookieHeader(COOKIE_HEADER));
 
   const page = await context.newPage();
+  let sessionValid = false;
 
   try {
     log('Navigating to OiiOii…');
@@ -756,6 +853,7 @@ async function tryClaimOnce(browser, state, contextOptions = {}) {
       );
     }
 
+    sessionValid = true;
     log('Session looks valid. Searching for daily 盒飯 claim…');
     await dismissBlockingDialogs(page);
 
@@ -783,6 +881,14 @@ async function tryClaimOnce(browser, state, contextOptions = {}) {
     await saveScreenshot(page, 'no-claim-button');
     return false;
   } finally {
+    // Capture before closing: cookies the site re-issued during this visit are the
+    // whole point of rotation. Only trust a context that actually reached a login.
+    if (sessionValid) {
+      refreshedState = await context.storageState().catch((error) => {
+        warn(`Could not read back the refreshed storage state: ${error.message}`);
+        return refreshedState;
+      });
+    }
     await context.close();
   }
 }
@@ -798,6 +904,7 @@ async function main() {
   const { name: browserName, engine, launchOptions, contextOptions } = resolveBrowserEngine();
   log(`Using Playwright browser: ${browserName}`);
   const browser = await engine.launch(launchOptions);
+  let claimed = false;
 
   try {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -805,7 +912,8 @@ async function main() {
       try {
         const ok = await tryClaimOnce(browser, state, contextOptions);
         if (ok) {
-          await writeClaimResult('checked_in', 'Claim completed or was already claimed today.');
+          // The result file is written in `finally`, once the session report is filled in.
+          claimed = true;
           log('Done.');
           return;
         }
@@ -833,7 +941,18 @@ async function main() {
     );
   } finally {
     await browser.close();
+    // Runs on success and on failure: as long as a logged-in page was reached, the
+    // refreshed state is worth inspecting and storing.
+    if (refreshedState) {
+      reportSessionLifetime(refreshedState, 'after run');
+      await rotateStoredSession(state?.parsed, refreshedState);
+    } else if (state?.parsed) {
+      reportSessionLifetime(state.parsed, 'stored secret');
+    }
     if (state) await rm(state.directory, { recursive: true, force: true });
+    if (claimed) {
+      await writeClaimResult('checked_in', 'Claim completed or was already claimed today.');
+    }
   }
 }
 

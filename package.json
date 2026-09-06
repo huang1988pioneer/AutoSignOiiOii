@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "claim": "node scripts/claim-lunch.mjs",
-    "check": "node --check scripts/claim-lunch.mjs && node --check scripts/summarize-claim-results.mjs",
+    "check": "node --check scripts/claim-lunch.mjs && node --check scripts/session-store.mjs && node --check scripts/summarize-claim-results.mjs",
     "summary": "node scripts/summarize-claim-results.mjs"
   },
   "devDependencies": {
     "playwright": "1.55.0"
+  },
+  "dependencies": {
+    "libsodium-wrappers": "^0.8.4"
   }
 }

@@ -137,6 +137,7 @@ jobs:
           sleep "$delay_seconds"
 
       - name: Create staggered account schedule
+        if: github.event_name == 'schedule'
         id: schedule
         shell: bash
         run: |
@@ -169,7 +170,7 @@ jobs:
       OII_ACCOUNT_NUMBER: ${{ matrix.account }}
     steps:
       - name: Wait for this account's turn
-        if: ${{ env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '' }}
+        if: ${{ github.event_name == 'schedule' && (env.OII_STORAGE_STATE_B64 != '' || env.OII_COOKIE != '') }}
         shell: bash
         env:
           ACCOUNT_DELAYS: ${{ needs.random_start.outputs.account_delays }}

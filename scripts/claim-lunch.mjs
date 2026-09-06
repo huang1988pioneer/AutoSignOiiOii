@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { canRotate, inspectSession, updateRepositorySecret } from './session-store.mjs';
+import { readCurrentPoints } from './current-points.mjs';
 
 // ─── Configuration ──────────────────────────────────────────────────────────────
 const HOME_URL = 'https://www.oiioii.ai/';
@@ -63,6 +64,7 @@ function log(message) {
 // Session facts collected during the run and folded into claim-result.json, so the
 // daily summary can flag logins that are about to expire.
 const sessionReport = { session: null, rotation: null };
+let currentPoints = null;
 
 async function writeClaimResult(status, message) {
   await mkdir(RESULT_DIR, { recursive: true });
@@ -71,6 +73,7 @@ async function writeClaimResult(status, message) {
     name: ACCOUNT_NAME,
     status,
     message,
+    currentPoints,
     finishedAt: new Date().toISOString(),
     ...sessionReport,
   };
@@ -820,6 +823,7 @@ async function tryClaimOnPage(page, source) {
 let refreshedState = null;
 
 async function tryClaimOnce(browser, state, contextOptions = {}) {
+  currentPoints = null;
   const context = await browser.newContext({
     ...(state ? { storageState: state.file } : {}),
     ...contextOptions,
@@ -884,6 +888,23 @@ async function tryClaimOnce(browser, state, contextOptions = {}) {
     // Capture before closing: cookies the site re-issued during this visit are the
     // whole point of rotation. Only trust a context that actually reached a login.
     if (sessionValid) {
+      // Reload after claiming so the balance comes from the server, not a stale
+      // pre-claim pill. Failure to read points must not change the claim status.
+      try {
+        await page.goto('https://www.oiioii.ai/zh-Hant/home', {
+          waitUntil: 'domcontentloaded', timeout: 30_000,
+        });
+        for (let attempt = 0; attempt < 5; attempt++) {
+          await waitForStable(page, 1000);
+          if (await isLoggedOut(page)) break;
+          currentPoints = await readCurrentPoints(page);
+          if (currentPoints !== null) break;
+        }
+        if (currentPoints === null) warn('Could not read current points from the account pill.');
+        else log(`Current points: ${currentPoints}`);
+      } catch (error) {
+        warn(`Could not read current points: ${error.message}`);
+      }
       refreshedState = await context.storageState().catch((error) => {
         warn(`Could not read back the refreshed storage state: ${error.message}`);
         return refreshedState;

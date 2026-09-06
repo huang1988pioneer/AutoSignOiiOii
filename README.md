@@ -126,6 +126,8 @@ dotnet run --project OiiOiiFlow/OiiOiiFlow.csproj
 
 ## 疑難排解
 
+`daily-summary` 的 Account results 表會顯示各帳號的「當前點數」，來源是簽到流程結束後重新載入首頁的右上角點數欄，並保存於結果 JSON 的 `currentPoints`。讀取失敗或舊結果沒有點數時顯示「無法取得」；實際零點會顯示 `0`。既有 workflow run 的摘要不會追溯更新。
+
 - **登入狀態過期**：重新取得 Storage State 或 Cookie，並更新對應的 GitHub Secret。
 - **找不到每日領取按鈕**：到 workflow 的 Artifact 查看截圖；OiiOii 的 UI 若有變更，可能需要調整 `scripts/claim-lunch.mjs` 的選擇器。
 - **排程沒有準時執行**：GitHub Actions 的排程可能延遲，尤其在整點附近；可先手動執行驗證設定。

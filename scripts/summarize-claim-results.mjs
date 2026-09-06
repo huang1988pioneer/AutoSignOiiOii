@@ -111,10 +111,12 @@ if (expiring.length) {
 
 const activeRows = rows.filter((row) => row.status !== 'skipped');
 if (activeRows.length) {
-  lines.push('### Account results', '', '| # | Account | Status | Note |', '| ---: | --- | --- | --- |');
+  lines.push('### Account results', '', '| # | Account | Status | 當前點數 | Note |', '| ---: | --- | --- | ---: | --- |');
   for (const row of activeRows) {
     const badge = row.status === 'checked_in' ? '✅ checked_in' : '❌ failed';
-    lines.push(`| ${row.account} | ${escapeCell(row.name)} | ${badge} | ${escapeCell(compact(row.message))} |`);
+    const points = typeof row.currentPoints === 'number' && Number.isFinite(row.currentPoints) && row.currentPoints >= 0
+      ? row.currentPoints.toLocaleString('en-US') : '無法取得';
+    lines.push(`| ${row.account} | ${escapeCell(row.name)} | ${badge} | ${points} | ${escapeCell(compact(row.message))} |`);
   }
   lines.push('');
 }

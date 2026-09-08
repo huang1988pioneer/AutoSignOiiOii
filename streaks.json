@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-08T09:44:28.533Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34208788853",
+  "generatedAt": "2026-09-08T17:01:39.624Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34253796340",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -8,48 +8,51 @@
       "name": "huang1988pioneer",
       "label": "huang1988pioneer",
       "status": "checked_in",
-      "streak": 3,
-      "lastCheckInDate": "2026-09-08",
+      "streak": 4,
+      "lastCheckInDate": "2026-09-09",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
-        "2026-09-08"
+        "2026-09-08",
+        "2026-09-09"
       ],
       "currentPoints": 27,
       "remainingCredits": 27,
-      "finishedAt": "2026-09-08T09:43:47.155Z"
+      "finishedAt": "2026-09-08T17:01:24.673Z"
     },
     {
       "account": 2,
       "name": "abuhg17",
       "label": "abuhg17",
       "status": "checked_in",
-      "streak": 3,
-      "lastCheckInDate": "2026-09-08",
+      "streak": 4,
+      "lastCheckInDate": "2026-09-09",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
-        "2026-09-08"
+        "2026-09-08",
+        "2026-09-09"
       ],
       "currentPoints": 24,
       "remainingCredits": 24,
-      "finishedAt": "2026-09-08T09:44:12.330Z"
+      "finishedAt": "2026-09-08T17:00:20.035Z"
     },
     {
       "account": 3,
       "name": "goldshoot0720",
       "label": "goldshoot0720",
       "status": "checked_in",
-      "streak": 3,
-      "lastCheckInDate": "2026-09-08",
+      "streak": 4,
+      "lastCheckInDate": "2026-09-09",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
-        "2026-09-08"
+        "2026-09-08",
+        "2026-09-09"
       ],
       "currentPoints": 60,
       "remainingCredits": 60,
-      "finishedAt": "2026-09-08T09:43:55.047Z"
+      "finishedAt": "2026-09-08T17:00:43.644Z"
     },
     {
       "account": 4,
@@ -416,8 +419,8 @@
   "streakSource": "recorded_check_ins",
   "summary": {
     "recorded": 33,
-    "max": 3,
+    "max": 4,
     "min": 0,
-    "average": 0.3
+    "average": 0.4
   }
 }

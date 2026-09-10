@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-10T03:15:50.379Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34431539625",
+  "generatedAt": "2026-09-10T05:35:57.482Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34438258829",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -17,9 +17,9 @@
         "2026-09-09",
         "2026-09-10"
       ],
-      "currentPoints": 5,
-      "remainingCredits": 5,
-      "finishedAt": "2026-09-10T03:15:15.480Z"
+      "currentPoints": 11,
+      "remainingCredits": 11,
+      "finishedAt": "2026-09-10T05:34:59.603Z"
     },
     {
       "account": 2,
@@ -37,7 +37,7 @@
       ],
       "currentPoints": 22,
       "remainingCredits": 22,
-      "finishedAt": "2026-09-10T03:15:37.337Z"
+      "finishedAt": "2026-09-10T05:35:41.770Z"
     },
     {
       "account": 3,
@@ -53,9 +53,9 @@
         "2026-09-09",
         "2026-09-10"
       ],
-      "currentPoints": 60,
-      "remainingCredits": 60,
-      "finishedAt": "2026-09-10T03:15:29.461Z"
+      "currentPoints": 40,
+      "remainingCredits": 40,
+      "finishedAt": "2026-09-10T05:35:29.208Z"
     },
     {
       "account": 4,

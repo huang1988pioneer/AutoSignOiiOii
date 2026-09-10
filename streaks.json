@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-10T09:23:36.460Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34459625116",
+  "generatedAt": "2026-09-10T17:20:40.863Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34503859091",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -8,54 +8,57 @@
       "name": "huang1988pioneer",
       "label": "huang1988pioneer",
       "status": "checked_in",
-      "streak": 5,
-      "lastCheckInDate": "2026-09-10",
+      "streak": 6,
+      "lastCheckInDate": "2026-09-11",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
         "2026-09-08",
         "2026-09-09",
-        "2026-09-10"
+        "2026-09-10",
+        "2026-09-11"
       ],
       "currentPoints": 11,
       "remainingCredits": 11,
-      "finishedAt": "2026-09-10T09:21:45.033Z"
+      "finishedAt": "2026-09-10T17:18:29.247Z"
     },
     {
       "account": 2,
       "name": "abuhg17",
       "label": "abuhg17",
       "status": "checked_in",
-      "streak": 5,
-      "lastCheckInDate": "2026-09-10",
+      "streak": 6,
+      "lastCheckInDate": "2026-09-11",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
         "2026-09-08",
         "2026-09-09",
-        "2026-09-10"
+        "2026-09-10",
+        "2026-09-11"
       ],
       "currentPoints": 22,
       "remainingCredits": 22,
-      "finishedAt": "2026-09-10T09:23:21.666Z"
+      "finishedAt": "2026-09-10T17:20:25.636Z"
     },
     {
       "account": 3,
       "name": "goldshoot0720",
       "label": "goldshoot0720",
       "status": "checked_in",
-      "streak": 5,
-      "lastCheckInDate": "2026-09-10",
+      "streak": 6,
+      "lastCheckInDate": "2026-09-11",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
         "2026-09-08",
         "2026-09-09",
-        "2026-09-10"
+        "2026-09-10",
+        "2026-09-11"
       ],
       "currentPoints": 40,
       "remainingCredits": 40,
-      "finishedAt": "2026-09-10T09:22:45.027Z"
+      "finishedAt": "2026-09-10T17:18:51.438Z"
     },
     {
       "account": 4,
@@ -422,7 +425,7 @@
   "streakSource": "recorded_check_ins",
   "summary": {
     "recorded": 33,
-    "max": 5,
+    "max": 6,
     "min": 0,
     "average": 0.5
   }

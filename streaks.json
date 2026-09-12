@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-12T09:17:11.219Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34684490506",
+  "generatedAt": "2026-09-12T16:03:43.383Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/34703669312",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -8,8 +8,8 @@
       "name": "huang1988pioneer",
       "label": "huang1988pioneer",
       "status": "checked_in",
-      "streak": 7,
-      "lastCheckInDate": "2026-09-12",
+      "streak": 8,
+      "lastCheckInDate": "2026-09-13",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
@@ -17,19 +17,20 @@
         "2026-09-09",
         "2026-09-10",
         "2026-09-11",
-        "2026-09-12"
+        "2026-09-12",
+        "2026-09-13"
       ],
       "currentPoints": 27,
       "remainingCredits": 27,
-      "finishedAt": "2026-09-12T09:16:32.985Z"
+      "finishedAt": "2026-09-12T16:03:26.055Z"
     },
     {
       "account": 2,
       "name": "abuhg17",
       "label": "abuhg17",
       "status": "checked_in",
-      "streak": 7,
-      "lastCheckInDate": "2026-09-12",
+      "streak": 8,
+      "lastCheckInDate": "2026-09-13",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
@@ -37,19 +38,20 @@
         "2026-09-09",
         "2026-09-10",
         "2026-09-11",
-        "2026-09-12"
+        "2026-09-12",
+        "2026-09-13"
       ],
       "currentPoints": 10,
       "remainingCredits": 10,
-      "finishedAt": "2026-09-12T09:16:46.803Z"
+      "finishedAt": "2026-09-12T16:03:30.777Z"
     },
     {
       "account": 3,
       "name": "goldshoot0720",
       "label": "goldshoot0720",
       "status": "checked_in",
-      "streak": 7,
-      "lastCheckInDate": "2026-09-12",
+      "streak": 8,
+      "lastCheckInDate": "2026-09-13",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
@@ -57,11 +59,12 @@
         "2026-09-09",
         "2026-09-10",
         "2026-09-11",
-        "2026-09-12"
+        "2026-09-12",
+        "2026-09-13"
       ],
       "currentPoints": 0,
       "remainingCredits": 0,
-      "finishedAt": "2026-09-12T09:16:57.127Z"
+      "finishedAt": "2026-09-12T16:03:17.159Z"
     },
     {
       "account": 4,
@@ -428,8 +431,8 @@
   "streakSource": "recorded_check_ins",
   "summary": {
     "recorded": 33,
-    "max": 7,
+    "max": 8,
     "min": 0,
-    "average": 0.6
+    "average": 0.7
   }
 }

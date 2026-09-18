@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-18T06:41:49.006Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/35312891266",
+  "generatedAt": "2026-09-18T08:44:11.409Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/35321804097",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -27,38 +27,12 @@
       ],
       "currentPoints": 10,
       "remainingCredits": 10,
-      "finishedAt": "2026-09-18T06:41:37.154Z"
+      "finishedAt": "2026-09-18T08:43:55.893Z"
     },
     {
       "account": 2,
       "name": "abuhg17",
       "label": "abuhg17",
-      "status": "failed",
-      "streak": 13,
-      "lastCheckInDate": "2026-09-18",
-      "checkInDates": [
-        "2026-09-06",
-        "2026-09-07",
-        "2026-09-08",
-        "2026-09-09",
-        "2026-09-10",
-        "2026-09-11",
-        "2026-09-12",
-        "2026-09-13",
-        "2026-09-14",
-        "2026-09-15",
-        "2026-09-16",
-        "2026-09-17",
-        "2026-09-18"
-      ],
-      "currentPoints": null,
-      "remainingCredits": null,
-      "finishedAt": "2026-09-18T06:39:51.293Z"
-    },
-    {
-      "account": 3,
-      "name": "goldshoot0720",
-      "label": "goldshoot0720",
       "status": "checked_in",
       "streak": 13,
       "lastCheckInDate": "2026-09-18",
@@ -79,7 +53,33 @@
       ],
       "currentPoints": 0,
       "remainingCredits": 0,
-      "finishedAt": "2026-09-18T06:40:35.113Z"
+      "finishedAt": "2026-09-18T08:42:58.537Z"
+    },
+    {
+      "account": 3,
+      "name": "goldshoot0720",
+      "label": "goldshoot0720",
+      "status": "failed",
+      "streak": 13,
+      "lastCheckInDate": "2026-09-18",
+      "checkInDates": [
+        "2026-09-06",
+        "2026-09-07",
+        "2026-09-08",
+        "2026-09-09",
+        "2026-09-10",
+        "2026-09-11",
+        "2026-09-12",
+        "2026-09-13",
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18"
+      ],
+      "currentPoints": null,
+      "remainingCredits": null,
+      "finishedAt": "2026-09-18T08:43:18.304Z"
     },
     {
       "account": 4,

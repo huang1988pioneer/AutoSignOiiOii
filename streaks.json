@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-18T04:03:34.012Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/35301875967",
+  "generatedAt": "2026-09-18T05:16:10.640Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/35308079185",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -25,15 +25,15 @@
         "2026-09-17",
         "2026-09-18"
       ],
-      "currentPoints": null,
-      "remainingCredits": null,
-      "finishedAt": "2026-09-18T04:02:26.909Z"
+      "currentPoints": 10,
+      "remainingCredits": 10,
+      "finishedAt": "2026-09-18T05:14:09.305Z"
     },
     {
       "account": 2,
       "name": "abuhg17",
       "label": "abuhg17",
-      "status": "checked_in",
+      "status": "failed",
       "streak": 13,
       "lastCheckInDate": "2026-09-18",
       "checkInDates": [
@@ -53,13 +53,13 @@
       ],
       "currentPoints": null,
       "remainingCredits": null,
-      "finishedAt": "2026-09-18T04:02:26.232Z"
+      "finishedAt": "2026-09-18T05:13:29.962Z"
     },
     {
       "account": 3,
       "name": "goldshoot0720",
       "label": "goldshoot0720",
-      "status": "checked_in",
+      "status": "failed",
       "streak": 13,
       "lastCheckInDate": "2026-09-18",
       "checkInDates": [
@@ -79,7 +79,7 @@
       ],
       "currentPoints": 0,
       "remainingCredits": 0,
-      "finishedAt": "2026-09-18T04:03:15.039Z"
+      "finishedAt": "2026-09-18T05:15:54.821Z"
     },
     {
       "account": 4,

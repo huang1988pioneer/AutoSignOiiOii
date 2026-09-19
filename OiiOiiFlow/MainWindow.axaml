@@ -116,7 +116,7 @@
         <StackPanel Spacing="5">
           <TextBlock Classes="eyebrow" Text="LOGIN STATE" />
           <TextBlock Text="建立登入狀態" FontSize="28" FontWeight="SemiBold" Foreground="#172B36" />
-          <TextBlock Classes="muted" Text="選擇帳號、完成官方登入，再複製登入狀態至 GitHub Secret。" TextWrapping="Wrap" />
+          <TextBlock Classes="muted" Text="選擇帳號、完成官方登入，再複製或安全同步登入狀態至 GitHub Actions。" TextWrapping="Wrap" />
         </StackPanel>
         <Border Classes="panel">
           <Grid ColumnDefinitions="42,*">
@@ -132,6 +132,7 @@
                   <TextBlock x:Name="SecretNameText" Text="OII_STORAGE_STATE_B64_1" Foreground="#0A5A54" FontFamily="Consolas" />
                 </Border>
               </StackPanel>
+              <CheckBox x:Name="AutoPublishActionsCheckBox" IsChecked="True" Content="登入完成後自動同步到 GitHub Actions" />
             </StackPanel>
           </Grid>
         </Border>
@@ -150,9 +151,11 @@
           <Grid ColumnDefinitions="42,*">
             <TextBlock Classes="stepNumber" Text="03" VerticalAlignment="Top" />
             <StackPanel Grid.Column="1" Spacing="8">
-              <TextBlock Text="複製登入狀態至剪貼簿" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Text="同步登入狀態至 GitHub Actions" FontWeight="SemiBold" FontSize="16" />
+              <TextBlock Classes="muted" Text="同步會安全寫入對應的 Actions Secret，並將帳號名稱寫入 Actions Variable。需要先登入 GitHub CLI。" TextWrapping="Wrap" FontSize="12" />
               <TextBlock x:Name="ResultText" Classes="muted" Text="登入完成並關閉瀏覽器後，讀取 auth-N.json 並複製 Base64 至剪貼簿。" TextWrapping="Wrap" />
               <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button x:Name="PublishActionsButton" Classes="primary" IsEnabled="False" Click="PublishActionsButton_OnClick">同步至 GitHub Actions</Button>
                 <Button x:Name="CopyStateButton" Classes="primary" IsEnabled="False" Click="CopyStateButton_OnClick">讀取並複製登入狀態</Button>
                 <Button x:Name="CopySecretNameButton" IsEnabled="False" Click="CopySecretNameButton_OnClick">複製 Secret 名稱</Button>
               </StackPanel>

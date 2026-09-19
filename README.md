@@ -124,7 +124,11 @@ dotnet run --project OiiOiiFlow/OiiOiiFlow.csproj
 
 1. 選擇帳號編號，按下建立登入狀態。
 2. 在開啟的瀏覽器完成 OiiOii 登入，然後關閉瀏覽器。
-3. 在工具中讀取並複製 Base64，貼入相同編號的 GitHub Secret。
+3. 預設會自動同步到 GitHub Actions：登入狀態寫入 `OII_STORAGE_STATE_B64_N` Secret，帳號別名寫入 `OII_ACCOUNT_NAME_N` Variable；也可以關閉自動同步後改用手動按鈕或複製 Base64。
+
+首次同步前，請在 PowerShell 執行 `gh auth login -h github.com`，並以具備此儲存庫 Actions Secrets 與 Variables 寫入權限的 GitHub 帳號完成登入。登入狀態會透過 GitHub CLI 的標準輸入傳送，不會出現在命令列、工具畫面或日誌中。
+
+工具會優先使用電腦已安裝的 Microsoft Edge，其次是 Google Chrome，因此通常不需要下載 Playwright Chromium。若兩者都找不到，才會下載內建 Chromium；下載或解壓縮超過 5 分鐘會自動停止並顯示可採取的修復方式，不會在背景無限等待。
 
 工具與 workflow 皆使用 `01` 至 `33` 編號。選好編號後，把 Base64 貼到對應的 `OII_STORAGE_STATE_B64_N` 即可；沒有 Secret 的編號不會實際開啟瀏覽器。
 

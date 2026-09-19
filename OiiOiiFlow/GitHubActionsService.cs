@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -13,6 +14,29 @@ internal sealed class GitHubActionsService
     public async Task TriggerClaimAsync()
     {
         await RunGhAsync("workflow", "run", Workflow, "--repo", Repository, "--ref", "main");
+    }
+
+    public async Task PublishLoginStateAsync(int accountNumber, string storageStateBase64, string accountName)
+    {
+        if (accountNumber is < 1 or > 33)
+            throw new ArgumentOutOfRangeException(nameof(accountNumber), "帳號編號必須介於 1 至 33。");
+        if (string.IsNullOrWhiteSpace(storageStateBase64))
+            throw new ArgumentException("登入狀態不可為空白。", nameof(storageStateBase64));
+        if (Encoding.UTF8.GetByteCount(storageStateBase64) > 48 * 1024)
+            throw new InvalidOperationException("登入狀態超過 GitHub Actions Secret 的 48 KB 上限，無法同步。");
+        if (string.IsNullOrWhiteSpace(accountName))
+            throw new ArgumentException("帳號名稱不可為空白。", nameof(accountName));
+
+        var secretName = $"OII_STORAGE_STATE_B64_{accountNumber}";
+        var variableName = $"OII_ACCOUNT_NAME_{accountNumber}";
+
+        // Pass the sensitive state through stdin so it never appears in the process command line.
+        await RunGhWithInputAsync(
+            storageStateBase64,
+            "secret", "set", secretName, "--app", "actions", "--repo", Repository);
+        await RunGhWithInputAsync(
+            accountName,
+            "variable", "set", variableName, "--repo", Repository);
     }
 
     public async Task<DashboardSnapshot> GetSnapshotAsync(decimal pointsPerClaim)
@@ -102,7 +126,13 @@ internal sealed class GitHubActionsService
         return results.OrderBy(result => result.Number).ToArray();
     }
 
-    private static async Task<string> RunGhAsync(params string[] arguments)
+    private static Task<string> RunGhAsync(params string[] arguments) =>
+        RunGhCoreAsync(null, arguments);
+
+    private static Task<string> RunGhWithInputAsync(string input, params string[] arguments) =>
+        RunGhCoreAsync(input, arguments);
+
+    private static async Task<string> RunGhCoreAsync(string? input, IReadOnlyList<string> arguments)
     {
         using var process = new Process
         {
@@ -110,6 +140,7 @@ internal sealed class GitHubActionsService
             {
                 FileName = "gh",
                 UseShellExecute = false,
+                RedirectStandardInput = input is not null,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true,
@@ -117,6 +148,13 @@ internal sealed class GitHubActionsService
         };
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
         if (!process.Start()) throw new InvalidOperationException("無法啟動 GitHub CLI（gh）。");
+
+        if (input is not null)
+        {
+            await process.StandardInput.WriteAsync(input);
+            await process.StandardInput.FlushAsync();
+            process.StandardInput.Close();
+        }
 
         var outputTask = process.StandardOutput.ReadToEndAsync();
         var errorTask = process.StandardError.ReadToEndAsync();
@@ -128,6 +166,14 @@ internal sealed class GitHubActionsService
         var reason = string.IsNullOrWhiteSpace(error) ? output : error;
         reason = reason.Trim();
         if (reason.Length > 1_000) reason = reason[..1_000] + "…";
+        if (reason.Contains("Failed to log in", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("not logged into", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("Bad credentials", StringComparison.OrdinalIgnoreCase) ||
+            reason.Contains("HTTP 401", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "GitHub CLI 尚未登入或登入已過期。請在 PowerShell 執行 gh auth login -h github.com，完成後再同步。");
+        }
         throw new InvalidOperationException($"GitHub CLI 執行失敗：{reason}");
     }
 

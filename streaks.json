@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-25T00:29:10.137Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/36073661142",
+  "generatedAt": "2026-09-25T03:42:55.944Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/36090027386",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -32,15 +32,15 @@
         "2026-09-24",
         "2026-09-25"
       ],
-      "currentPoints": 0,
-      "remainingCredits": 0,
-      "finishedAt": "2026-09-25T00:28:49.389Z"
+      "currentPoints": null,
+      "remainingCredits": null,
+      "finishedAt": "2026-09-25T03:42:35.971Z"
     },
     {
       "account": 2,
       "name": "abuhg17",
       "label": "abuhg17",
-      "status": "failed",
+      "status": "checked_in",
       "streak": 20,
       "lastCheckInDate": "2026-09-25",
       "checkInDates": [
@@ -65,9 +65,9 @@
         "2026-09-24",
         "2026-09-25"
       ],
-      "currentPoints": null,
-      "remainingCredits": null,
-      "finishedAt": "2026-09-25T00:28:04.746Z"
+      "currentPoints": 30,
+      "remainingCredits": 30,
+      "finishedAt": "2026-09-25T03:42:19.511Z"
     },
     {
       "account": 3,
@@ -98,9 +98,9 @@
         "2026-09-24",
         "2026-09-25"
       ],
-      "currentPoints": null,
-      "remainingCredits": null,
-      "finishedAt": "2026-09-25T00:28:33.486Z"
+      "currentPoints": 0,
+      "remainingCredits": 0,
+      "finishedAt": "2026-09-25T03:42:41.614Z"
     },
     {
       "account": 4,

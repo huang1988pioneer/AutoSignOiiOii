@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-27T11:27:17.446Z",
-  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/36311961155",
+  "generatedAt": "2026-09-27T18:06:13.321Z",
+  "runUrl": "https://github.com/huang1988pioneer/AutoSignOiiOii/actions/runs/36336556940",
   "title": "OiiOii daily check-in results",
   "accounts": [
     {
@@ -8,6 +8,42 @@
       "name": "huang1988pioneer",
       "label": "huang1988pioneer",
       "status": "checked_in",
+      "streak": 23,
+      "lastCheckInDate": "2026-09-28",
+      "checkInDates": [
+        "2026-09-06",
+        "2026-09-07",
+        "2026-09-08",
+        "2026-09-09",
+        "2026-09-10",
+        "2026-09-11",
+        "2026-09-12",
+        "2026-09-13",
+        "2026-09-14",
+        "2026-09-15",
+        "2026-09-16",
+        "2026-09-17",
+        "2026-09-18",
+        "2026-09-19",
+        "2026-09-20",
+        "2026-09-21",
+        "2026-09-22",
+        "2026-09-23",
+        "2026-09-24",
+        "2026-09-25",
+        "2026-09-26",
+        "2026-09-27",
+        "2026-09-28"
+      ],
+      "currentPoints": 0,
+      "remainingCredits": 0,
+      "finishedAt": "2026-09-27T18:05:04.423Z"
+    },
+    {
+      "account": 2,
+      "name": "abuhg17",
+      "label": "abuhg17",
+      "status": "failed",
       "streak": 22,
       "lastCheckInDate": "2026-09-27",
       "checkInDates": [
@@ -36,50 +72,15 @@
       ],
       "currentPoints": null,
       "remainingCredits": null,
-      "finishedAt": "2026-09-27T11:12:04.586Z"
-    },
-    {
-      "account": 2,
-      "name": "abuhg17",
-      "label": "abuhg17",
-      "status": "checked_in",
-      "streak": 22,
-      "lastCheckInDate": "2026-09-27",
-      "checkInDates": [
-        "2026-09-06",
-        "2026-09-07",
-        "2026-09-08",
-        "2026-09-09",
-        "2026-09-10",
-        "2026-09-11",
-        "2026-09-12",
-        "2026-09-13",
-        "2026-09-14",
-        "2026-09-15",
-        "2026-09-16",
-        "2026-09-17",
-        "2026-09-18",
-        "2026-09-19",
-        "2026-09-20",
-        "2026-09-21",
-        "2026-09-22",
-        "2026-09-23",
-        "2026-09-24",
-        "2026-09-25",
-        "2026-09-26",
-        "2026-09-27"
-      ],
-      "currentPoints": 20,
-      "remainingCredits": 20,
-      "finishedAt": "2026-09-27T11:11:24.158Z"
+      "finishedAt": "2026-09-27T18:04:33.516Z"
     },
     {
       "account": 3,
       "name": "goldshoot0720",
       "label": "goldshoot0720",
       "status": "checked_in",
-      "streak": 22,
-      "lastCheckInDate": "2026-09-27",
+      "streak": 23,
+      "lastCheckInDate": "2026-09-28",
       "checkInDates": [
         "2026-09-06",
         "2026-09-07",
@@ -102,11 +103,12 @@
         "2026-09-24",
         "2026-09-25",
         "2026-09-26",
-        "2026-09-27"
+        "2026-09-27",
+        "2026-09-28"
       ],
       "currentPoints": 0,
       "remainingCredits": 0,
-      "finishedAt": "2026-09-27T11:11:59.070Z"
+      "finishedAt": "2026-09-27T18:05:55.331Z"
     },
     {
       "account": 4,
@@ -473,8 +475,8 @@
   "streakSource": "recorded_check_ins",
   "summary": {
     "recorded": 33,
-    "max": 22,
+    "max": 23,
     "min": 0,
-    "average": 2
+    "average": 2.1
   }
 }

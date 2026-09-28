@@ -1,10 +1,13 @@
 # AutoSignOiiOii
 
+> [!IMPORTANT]
+> **自 2026-09-28 起暫停自動執行。** 已停用 GitHub Actions 的排程觸發，工作流程不會再於下列時段自動執行，仍可從 Actions 頁面手動執行。恢復時請取消 `.github/workflows/claim-oiioii-lunch.yml` 中 `schedule` 區塊的註解。
+
 使用 GitHub Actions 自動領取 OiiOii 每日盒飯。工作流程每日會在多個台北時間時段執行，也可以手動觸發；支援最多 33 個帳號，並在失敗時保留截圖以利排查。
 
 ## 功能
 
-- 每日自動執行，或從 GitHub Actions 手動執行
+- 每日自動執行（目前已暫停），或從 GitHub Actions 手動執行
 - 支援 1～33 個 OiiOii 帳號；未設定 Secret 的編號會自動略過
 - 優先使用 Playwright Storage State，也可使用 Cookie Header
 - 找不到按鈕或暫時失敗時，最多重試 3 次
@@ -56,9 +59,9 @@ base64 -w0 auth.json
 
 JSON 採用參考專案的 `generatedAt`、`runUrl`、`title`、`accounts`、`summary` 結構；每個帳號提供 `account`、`name`、`label`、`status`、`finishedAt`、`currentPoints` 與相同數值的 `remainingCredits`。零點保留為 `0`，無法取得的點數為 `null`。連續簽到天數 `streak` 由本專案的成功紀錄計算（`streakSource: recorded_check_ins`），以台北日期為準，並保存 `lastCheckInDate` 與去重後的 `checkInDates`。同日重跑或已領取不會重複加天；連續兩日成功會加 1，漏簽後下次成功從 1 開始。同日失敗或略過不會抹除已成功紀錄，昨日的連續紀錄保留到今日結束；超過一天未成功則顯示 0。首次啟用從首次觀測成功算起，不追溯網站上既有天數。`summary.max/min/average` 統計全部帳號（含 0 天），`summary.recorded` 為帳號筆數。Job Summary 同時顯示連續簽到天數。本機執行預設讀取輸出目錄既有的 `streaks.json`，也可用 `OII_STREAKS_FILE` 指定歷史檔案；歷史格式損壞會停止產生，避免覆蓋紀錄。公開檔案不包含登入狀態、Cookie 或錯誤訊息。
 
-## 每日自動執行時段
+## 每日自動執行時段（已暫停）
 
-GitHub Actions 每天會在下列台北時間（UTC+8）各自執行一次：
+自動排程目前已暫停。恢復後，GitHub Actions 每天會在下列台北時間（UTC+8）各自執行一次：
 
 | 時段 | 執行方式 |
 | --- | --- |
